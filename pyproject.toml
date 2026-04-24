@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ut99py"
+version = "0.0.3"
+description = "Unreal Tournament 99 Python Port with OpenGL/Vulkan graphics"
+requires-python = ">=3.10"
+dependencies = ["PyOpenGL", "PySide6"]
+classifiers = ["Programming Language :: Python :: 3.10", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12"]
+
+[tool.setuptools.packages.find]
+where = ["."]
