@@ -1,7 +1,16 @@
 from typing import Optional, List, Dict, Any
 from ut99py.core import FName, FString, UObject, UStruct, FArchive, FArchiveFileReader
-from ut99py.core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
-from ut99py.core.types import FTime, FGuid, FVector, FRotator
+from ut99py.core.objver import (
+    PACKAGE_FILE_TAG,
+    VER_GUID_AND_GENERATIONS,
+    VER_SIZED_NAME_TABLE,
+)
+from ut99py.core.types import FTime, FGuid, FVector, FRotator, FCompactIndex, INDEX_NONE
+
+
+def AR_INDEX(ar: FArchive, value: int) -> int:
+    """C++ AR_INDEX(x) (UnArc.h:234): serialize x as an FCompactIndex."""
+    return ar.serialize_compact_index(FCompactIndex(value)).value
 
 
 class FObjectExport:
@@ -16,6 +25,17 @@ class FObjectExport:
         self.obj: Optional[UObject] = None
         self._hash_next: int = -1
 
+    def serialize(self, ar: FArchive) -> None:
+        """operator<<(FArchive&, FObjectExport&) (UnLinker.h:33)."""
+        self.class_index = AR_INDEX(ar, self.class_index)
+        self.super_index = AR_INDEX(ar, self.super_index)
+        self.package_index = ar.serialize_int32(self.package_index)
+        ar >> self.object_name
+        self.object_flags = ar.serialize_dword(self.object_flags)
+        self.serial_size = AR_INDEX(ar, self.serial_size)
+        if self.serial_size:
+            self.serial_offset = AR_INDEX(ar, self.serial_offset)
+
 
 class FObjectImport:
     def __init__(self):
@@ -27,11 +47,26 @@ class FObjectImport:
         self.source_linker: Optional['ULinkerLoad'] = None
         self.source_index: int = -1
 
+    def serialize(self, ar: FArchive) -> None:
+        """operator<<(FArchive&, FObjectImport&) (UnLinker.h:73)."""
+        ar >> self.class_package
+        ar >> self.class_name
+        self.package_index = ar.serialize_int32(self.package_index)
+        ar >> self.object_name
+        if ar.is_loading():
+            self.x_object = None
+            self.source_index = INDEX_NONE
+
 
 class FGenerationInfo:
     def __init__(self, export_count: int = 0, name_count: int = 0):
         self.export_count: int = export_count
         self.name_count: int = name_count
+
+    def serialize(self, ar: FArchive) -> None:
+        """operator<<(FArchive&, FGenerationInfo&) (UnLinker.h:102)."""
+        self.export_count = ar.serialize_int32(self.export_count)
+        self.name_count = ar.serialize_int32(self.name_count)
 
 
 class FPackageFileSummary:
@@ -53,6 +88,39 @@ class FPackageFileSummary:
 
     def get_file_version_licensee(self) -> int:
         return (self.file_version >> 16) & 0xffff
+
+    def serialize(self, ar: FArchive) -> None:
+        """operator<<(FArchive&, FPackageFileSummary&) (UnLinker.h:138)."""
+        self.tag = ar.serialize_int32(self.tag)
+        self.file_version = ar.serialize_int32(self.file_version)
+        self.package_flags = ar.serialize_dword(self.package_flags)
+        self.name_count = ar.serialize_int32(self.name_count)
+        self.name_offset = ar.serialize_int32(self.name_offset)
+        self.export_count = ar.serialize_int32(self.export_count)
+        self.export_offset = ar.serialize_int32(self.export_offset)
+        self.import_count = ar.serialize_int32(self.import_count)
+        self.import_offset = ar.serialize_int32(self.import_offset)
+
+        if self.get_file_version() >= VER_GUID_AND_GENERATIONS:
+            ar >> self.guid
+            generation_count = ar.serialize_int32(0)
+            if ar.is_loading():
+                self.generations = [FGenerationInfo() for _ in range(generation_count)]
+            for gen in self.generations:
+                ar >> gen
+        else:
+            # oldver (UnLinker.h:158): a heritage GUID list, then one implicit
+            # generation matching the table counts above.
+            heritage_count = ar.serialize_int32(0)
+            heritage_offset = ar.serialize_int32(0)
+            saved = ar.tell()
+            if heritage_count:
+                ar.seek(heritage_offset)
+                for _ in range(heritage_count):
+                    ar >> self.guid
+            ar.seek(saved)
+            if ar.is_loading():
+                self.generations = [FGenerationInfo(self.export_count, self.name_count)]
 
 
 class ULinker(UObject):
@@ -95,6 +163,9 @@ class ULinkerLoad(ULinker, FArchive):
 
     def __init__(self, parent: Optional[UObject], filename: str, load_flags: int = 0):
         super().__init__()
+        FArchive.__init__(self)  # second base; UObject.__init__ does not chain here
+        self._loading = True
+        self._persistent = True
         self.load_flags: int = load_flags
         self.verified: bool = False
         self.export_hash: List[int] = [0] * 256
@@ -114,65 +185,57 @@ class ULinkerLoad(ULinker, FArchive):
         if not self.loader:
             return
 
-        ar = self.loader
-        self.summary.tag = ar._read_uint32()
-        if self.summary.tag != PACKAGE_FILE_TAG:
-            raise ValueError(f"Invalid package tag: {hex(self.summary.tag)}")
-
-        self.summary.file_version = ar._read_int32()
-        self.summary.package_flags = ar._read_int32()
-        self.summary.name_count = ar._read_int32()
-        self.summary.name_offset = ar._read_int32()
-        self.summary.export_count = ar._read_int32()
-        self.summary.export_offset = ar._read_int32()
-        self.summary.import_count = ar._read_int32()
-        self.summary.import_offset = ar._read_int32()
-
-        if self.summary.get_file_version() >= VER_GUID_AND_GENERATIONS:
-            ar >> self.summary.guid
-            gen_count = ar._read_int32()
-            self.summary.generations = [FGenerationInfo() for _ in range(gen_count)]
-            for gen in self.summary.generations:
-                gen.export_count = ar._read_int32()
-                gen.name_count = ar._read_int32()
+        self.seek(0)
+        self >> self.summary
+        # Tag is INT in C++ (UnLinker.h:113) but the signature constant is the
+        # unsigned spelling, so compare in unsigned space.
+        tag = self.summary.tag & 0xFFFFFFFF
+        if tag != PACKAGE_FILE_TAG:
+            raise ValueError(f"Invalid package tag: {tag:#010x}")
 
         self._load_name_table()
         self._load_import_table()
         self._load_export_table()
 
     def _load_name_table(self) -> None:
+        """ULinkerLoad::LoadNames. Each entry is a name string followed by an
+        INT32 of flags (UnName.h:34 FNameEntry, Help/PACKAGES.md "Name table");
+        the string is size-prefixed from VER_SIZED_NAME_TABLE on, as
+        engine/ut_reader.py reads them. The flags are consumed but not kept:
+        the Python FName has no flags field.
+        """
         if not self.loader or self.summary.name_offset == 0:
             return
-        
-        self.loader.seek(self.summary.name_offset)
+
+        self.seek(self.summary.name_offset)
+        sized = self.summary.get_file_version() >= VER_SIZED_NAME_TABLE
+        read_name = self._read_ansi_string if sized else self._read_null_terminated_string
         self.name_map = []
         for _ in range(self.summary.name_count):
-            name = FName()
-            self.loader >> name
-            self.name_map.append(name)
+            name = read_name()
+            self._read_int32()
+            self.name_map.append(FName(name))
 
     def _load_import_table(self) -> None:
         if not self.loader or self.summary.import_offset == 0:
             return
-        
-        self.loader.seek(self.summary.import_offset)
+
+        self.seek(self.summary.import_offset)
         self.import_map = []
         for _ in range(self.summary.import_count):
             imp = FObjectImport()
-            self.loader >> imp.class_package >> imp.class_name >> imp.package_index >> imp.object_name
+            self >> imp
             self.import_map.append(imp)
 
     def _load_export_table(self) -> None:
         if not self.loader or self.summary.export_offset == 0:
             return
-        
-        self.loader.seek(self.summary.export_offset)
+
+        self.seek(self.summary.export_offset)
         self.export_map = []
         for _ in range(self.summary.export_count):
             exp = FObjectExport()
-            self.loader >> exp.class_index >> exp.super_index >> exp.package_index >> exp.object_name >> exp.object_flags >> exp.serial_size
-            if exp.serial_size > 0:
-                self.loader >> exp.serial_offset
+            self >> exp
             self.export_map.append(exp)
 
     def verify(self) -> None:
@@ -229,10 +292,27 @@ class ULinkerLoad(ULinker, FArchive):
             return self.loader.size()
         return 0
 
+    def read(self, length: int) -> bytes:
+        if self.loader:
+            return self.loader.read(length)
+        return b''
+
     def serialize(self, data: bytes, length: int) -> int:
         if self.loader:
             return self.loader.read(length)
         return 0
+
+    def serialize_name(self, name: FName) -> FName:
+        """ULinkerLoad::operator<<(FName&) (UnLinker.h:276): a compact index
+        into the file's name table. The entry lands in `name` in place, like
+        the C++ appMemcpy."""
+        index = AR_INDEX(self.loader, 0)
+        if not (0 <= index < len(self.name_map)):
+            raise ValueError(f"Bad name index {index}/{len(self.name_map)}")
+        source = self.name_map[index]
+        name.name = source.name
+        name.number = source.number
+        return name
 
 
 class ULinkerSave(ULinker, FArchive):

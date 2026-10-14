@@ -295,12 +295,25 @@ class FArchive:
         return data.decode('utf-16-le').rstrip('\x00')
     
     def _read_ansi_string(self) -> str:
+        """Size-prefixed ANSI string: BYTE size, then `size` bytes whose last
+        is the terminator (Help/PACKAGES.md "Data types stored in package
+        files")."""
         length = self._read_byte()
         if length == 0:
             return ""
         data = self.read(length)
         return data.decode('ascii', errors='replace').rstrip('\x00')
-    
+
+    def _read_null_terminated_string(self) -> str:
+        """NUL-terminated ANSI string, the pre-64 name-table layout."""
+        chars = []
+        while True:
+            byte = self._read_byte()
+            if byte == 0:
+                break
+            chars.append(byte)
+        return bytes(chars).decode('latin-1', errors='replace')
+
     def _read_bool(self) -> bool:
         return self._read_byte() != 0
 

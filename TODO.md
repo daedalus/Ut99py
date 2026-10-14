@@ -19,19 +19,26 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - [x] `FCompactIndex` serializer (declared in `UnArc.h:216`, impl in
       `Core.lib`) rewritten to the real format from `Help/PACKAGES.md`;
       `encode` now guards the C++ save-time mismatch, `decode` added.
-- [x] `core/linkers.py` tag bug fixed (`0x9E2A83C` → `PACKAGE_FILE_TAG`,
-      read as uint32) and the guid/generations block reads real INTs.
+- [x] `core/linkers.py` tag bug fixed (`0x9E2A83C` → `PACKAGE_FILE_TAG`) and
+      the guid/generations block reads real INTs.
+- [x] `Core/Inc/UnLinker.h` struct serializers → `core/linkers.py`:
+      `FPackageFileSummary` (incl. the oldver heritage path),
+      `FGenerationInfo`, `FObjectExport`, `FObjectImport`, plus `AR_INDEX`.
+      `ULinkerLoad` is now itself the archive the tables run against (it
+      initialises its `FArchive` base and delegates `read`/`seek`/`tell` to the
+      file reader), so `FObjectExport`/`FObjectImport` `operator<<` land
+      1-to-1: compact `ClassIndex`/`SuperIndex`/`SerialSize`/`SerialOffset`,
+      plain `INT` `PackageIndex`/`ObjectFlags`, `FName` references via
+      `ULinkerLoad::operator<<(FName&)` resolving through the file name table
+      with the C++ bounds check. `_load_name_table` decodes real entries
+      (size-prefixed from `VER_SIZED_NAME_TABLE`, NUL-terminated below).
 
 ## Next
-- [ ] `core/linkers.py` `_load_name_table`/`_load_import_table`/
-      `_load_export_table` still use the linker `<<FName` operator against the
-      on-disk name/import/export tables, which are not FName references.
-      `engine/ut_reader.py` already decodes the real layout (size-prefixed names
-      + `int` flags; compact indices for Class/Super/SerialSize/SerialOffset and
-      a plain `int` PackageIndex) — reconcile the two.
+- [ ] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (needs
+      `CreateExport`/`CreateImport`, i.e. the `UClass` construction path) and
+      `ULinkerSave::operator<<(FName&/UObject*&)` (needs a live `Saver`).
 - [ ] `Core/Inc/UnTemplate.h` `TArray`/`FString` operators (needed by
-      `engine/mesh.py`) and `Core/Inc/UnLinker.h` `ULinkerLoad`/`ULinkerSave`
-      `MapName`/`MapObject` + `FObjectExport`/`FObjectImport` serializers.
+      `engine/mesh.py`).
 - [ ] `Core/Inc/UnObjBas.h` QWORD/SQWORD operators (currently only `double`).
 - [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader`.
 - [ ] `Core/Inc/UnObj.h` gaps in `ut99py/core/objects.py`.
@@ -52,5 +59,14 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
   `serialize_double`.
 - `FCompactIndex`/`ut_reader._read_compact_index` are two implementations of
   the same format; `FCompactIndex.decode` is the verified one.
+- `core/linkers.py` `_load_name_table` reads and discards each name's INT32
+  flags: the Python `FName` has no flags field (C++ keeps them on `FNameEntry`
+  for the linker's own bookkeeping). The entry string layout follows
+  `engine/ut_reader.py`; `FNameEntry::operator<<` is in the prebuilt `Core.lib`.
+- `ULinkerLoad` does not push the summary's file version into `FArchive._ver`
+  (`ULinkerLoad::ULinkerLoad` is in `Core.lib`), so `ar.ver()` reports the
+  default `PACKAGE_FILE_VERSION` during object serialization.
+- `engine/assets.py` has a third header/table decoder that still reads UTF-16
+  `FString`s for names (UT99 uses ANSI). Reconcile it onto `core/linkers.py`.
 - `assets.py FPackageFileSummary.serialize` reads `PackageFlags` only when
   `file_version >= 68`; C++ reads it unconditionally (see `UnLinker.h`).

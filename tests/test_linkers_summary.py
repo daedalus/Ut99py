@@ -11,19 +11,25 @@ from ut99py.core.linkers import ULinkerLoad
 from ut99py.core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
 
 
-def _header(version=VER_GUID_AND_GENERATIONS, guid=(1, 2, 3, 4), generations=((11, 12), (13, 14))):
-    data = struct.pack("<I", PACKAGE_FILE_TAG)   # Tag
-    data += struct.pack("<i", version)           # FileVersion
-    data += struct.pack("<i", 0)                 # PackageFlags
-    for _ in range(6):                            # Name/Export/Import count+offset
-        data += struct.pack("<i", 0)
+def _header(
+    version=VER_GUID_AND_GENERATIONS,
+    guid=(1, 2, 3, 4),
+    generations=((11, 12), (13, 14)),
+):
+    data = struct.pack("<I", PACKAGE_FILE_TAG)  # Tag
+    data += struct.pack("<i", version)  # FileVersion
+    data += struct.pack("<i", 0)  # PackageFlags
+    data += struct.pack("<ii", 6, 0)  # NameCount, NameOffset
+    data += struct.pack("<ii", 2, 0)  # ExportCount, ExportOffset
+    data += struct.pack("<ii", 0, 0)  # ImportCount, ImportOffset
     if version >= VER_GUID_AND_GENERATIONS:
         for word in guid:
             data += struct.pack("<I", word)
         data += struct.pack("<i", len(generations))
         for export_count, name_count in generations:
-            data += struct.pack("<i", export_count)
-            data += struct.pack("<i", name_count)
+            data += struct.pack("<ii", export_count, name_count)
+    else:
+        data += struct.pack("<ii", 0, 0)  # HeritageCount, HeritageOffset
     return data
 
 
@@ -34,12 +40,20 @@ def test_valid_header_is_loaded(tmp_path):
     linker = ULinkerLoad(None, str(path))
 
     assert linker.success
-    assert linker.summary.tag == PACKAGE_FILE_TAG
+    # Tag is an INT on disk (UnLinker.h:113), so it reads back negative.
+    assert linker.summary.tag & 0xFFFFFFFF == PACKAGE_FILE_TAG
     assert linker.summary.get_file_version() == VER_GUID_AND_GENERATIONS
     assert linker.summary.get_file_version_licensee() == 0
-    assert (linker.summary.guid.a, linker.summary.guid.b,
-            linker.summary.guid.c, linker.summary.guid.d) == (1, 2, 3, 4)
-    assert [(g.export_count, g.name_count) for g in linker.summary.generations] == [(11, 12), (13, 14)]
+    assert (
+        linker.summary.guid.a,
+        linker.summary.guid.b,
+        linker.summary.guid.c,
+        linker.summary.guid.d,
+    ) == (1, 2, 3, 4)
+    assert [(g.export_count, g.name_count) for g in linker.summary.generations] == [
+        (11, 12),
+        (13, 14),
+    ]
 
 
 def test_wrong_tag_is_rejected(tmp_path):
@@ -51,11 +65,15 @@ def test_wrong_tag_is_rejected(tmp_path):
     assert not ULinkerLoad(None, str(path)).success
 
 
-def test_pre_68_header_has_no_guid_or_generations(tmp_path):
+def test_pre_68_header_synthesizes_one_generation(tmp_path):
+    # oldver branch (UnLinker.h:158): no Guid/Generations on disk; one
+    # generation is built from the header's own ExportCount/NameCount.
     path = tmp_path / "old.u"
     path.write_bytes(_header(version=VER_GUID_AND_GENERATIONS - 1))
 
     linker = ULinkerLoad(None, str(path))
 
     assert linker.success
-    assert linker.summary.generations == []
+    assert [(g.export_count, g.name_count) for g in linker.summary.generations] == [
+        (2, 6)
+    ]
