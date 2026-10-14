@@ -5,12 +5,8 @@ from ut99py.core.objver import (
     VER_GUID_AND_GENERATIONS,
     VER_SIZED_NAME_TABLE,
 )
-from ut99py.core.types import FTime, FGuid, FVector, FRotator, FCompactIndex, INDEX_NONE
-
-
-def AR_INDEX(ar: FArchive, value: int) -> int:
-    """C++ AR_INDEX(x) (UnArc.h:234): serialize x as an FCompactIndex."""
-    return ar.serialize_compact_index(FCompactIndex(value)).value
+from ut99py.core.types import FTime, FGuid, FVector, FRotator, INDEX_NONE
+from ut99py.core.system import AR_INDEX
 
 
 class FObjectExport:

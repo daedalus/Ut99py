@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     from .types import FVector, FRotator
 
 
+def AR_INDEX(ar: 'FArchive', value: int) -> int:
+    """C++ AR_INDEX(x) (UnArc.h:234): serialize x as an FCompactIndex."""
+    return ar.serialize_compact_index(FCompactIndex(value)).value
+
+
 class FArchive:
     """Byte-order-neutral serializer. Ported from Core/Inc/UnArc.h.
 
@@ -134,6 +139,8 @@ class FArchive:
             return self.serialize_int32(value)
         if isinstance(value, float):
             return self.serialize_float(value)
+        if isinstance(value, str):
+            return self.serialize_str(value)
         if isinstance(value, FName):
             return self.serialize_name(value)
         if isinstance(value, FGuid):
@@ -227,13 +234,64 @@ class FArchive:
         """Virtual `operator<<(UObject*&)` (UnArc.h:43). See serialize_name."""
         raise NotImplementedError("override serialize_object for this archive")
 
-    def serialize_str(self, s: FString) -> 'FArchive':
-        return self
+    def serialize_str(self, s: FString) -> FString:
+        """operator<<(FArchive&, FString&) (UnTemplate.h:1403).
+
+        The C++ body is CORE_API (in the prebuilt Core.lib); the on-disk layout
+        follows Help/PACKAGES.md:656 -- characters, one byte each, terminated by
+        a zero byte -- which is also what engine/ut_reader.py's _read_string
+        decodes. C++ returns the FArchive, but Python strings are immutable, so
+        the loaded value is returned the way the other primitives are.
+        """
+        if self._loading:
+            return FString(self._read_null_terminated_string())
+        self.write(s.encode('latin-1', errors='replace') + b'\x00')
+        return s
 
     def serialize_int(self, value: int, max_bits: int = 0) -> int:
         """C++ SerializeInt(Value, Max). The base FArchive writes a full DWORD
         whatever Max says (UnArc.h:31); FBitWriter overrides this in UnBits.h."""
         return self.serialize_dword(value)
+
+    def count_bytes(self, used: int, allocated: int) -> None:
+        """C++ `virtual CountBytes( SIZE_T InNum, SIZE_T InMax )` (UnArc.h:37).
+        Only the memory archive overrides it; file archives ignore it."""
+        return
+
+    def serialize_tarray(self, array: TArray, element: Optional[type] = None,
+                         element_size: Optional[int] = None) -> TArray:
+        """operator<<(FArchive&, TArray&) (UnTemplate.h:435), plus the
+        TArray<BYTE> specialization (UnTemplate.h:686).
+
+        Python has no `sizeof(T)`, so `element_size` stands in for it: 1 selects
+        the byte specialization that skips construction and moves the buffer
+        raw. `element` is the C++ `new(A) T` factory; loading a non-empty array
+        needs it because the stream stores only the count.
+        """
+        count = AR_INDEX(self, len(array))
+        size = element_size or 0
+        self.count_bytes(count * size, len(array) * size)
+
+        if element_size == 1:
+            if self._loading:
+                array[:] = self.read(count)
+            else:
+                self.write(bytes(array))
+            return array
+
+        if self._loading:
+            del array[:]
+            if element is None:
+                raise NotImplementedError(
+                    "serialize_tarray needs `element` to load elements: the "
+                    "stream stores the count only (UnTemplate.h:455)")
+            append = array.append
+            for _ in range(count):
+                append(self._serialize(element()))
+        else:
+            for item in array:
+                self._serialize(item)
+        return array
 
     def serialize_bytes(self, data: bytes) -> bytes:
         """C++ Serialize(V, Length) for a raw buffer. When loading, `data`
