@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 from ut99py.core import FName, FString, UObject, UStruct, FArchive, FArchiveFileReader
+from ut99py.core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
 from ut99py.core.types import FTime, FGuid, FVector, FRotator
 
 
@@ -114,27 +115,26 @@ class ULinkerLoad(ULinker, FArchive):
             return
 
         ar = self.loader
-        self.summary.tag = ar.read(4)
-        if self.summary.tag != 0x9E2A83C:
+        self.summary.tag = ar._read_uint32()
+        if self.summary.tag != PACKAGE_FILE_TAG:
             raise ValueError(f"Invalid package tag: {hex(self.summary.tag)}")
 
-        self.summary.file_version = int.from_bytes(ar.read(4), 'little')
-        self.summary.package_flags = int.from_bytes(ar.read(4), 'little')
-        self.summary.name_count = int.from_bytes(ar.read(4), 'little')
-        self.summary.name_offset = int.from_bytes(ar.read(4), 'little')
-        self.summary.export_count = int.from_bytes(ar.read(4), 'little')
-        self.summary.export_offset = int.from_bytes(ar.read(4), 'little')
-        self.summary.import_count = int.from_bytes(ar.read(4), 'little')
-        self.summary.import_offset = int.from_bytes(ar.read(4), 'little')
+        self.summary.file_version = ar._read_int32()
+        self.summary.package_flags = ar._read_int32()
+        self.summary.name_count = ar._read_int32()
+        self.summary.name_offset = ar._read_int32()
+        self.summary.export_count = ar._read_int32()
+        self.summary.export_offset = ar._read_int32()
+        self.summary.import_count = ar._read_int32()
+        self.summary.import_offset = ar._read_int32()
 
-        if self.summary.get_file_version() >= 68:
-            self.summary.guid = FGuid()
-            ar << self.summary.guid
-            gen_count = 0
-            ar << gen_count
+        if self.summary.get_file_version() >= VER_GUID_AND_GENERATIONS:
+            ar >> self.summary.guid
+            gen_count = ar._read_int32()
             self.summary.generations = [FGenerationInfo() for _ in range(gen_count)]
             for gen in self.summary.generations:
-                ar << gen.export_count << gen.name_count
+                gen.export_count = ar._read_int32()
+                gen.name_count = ar._read_int32()
 
         self._load_name_table()
         self._load_import_table()

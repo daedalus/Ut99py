@@ -1214,22 +1214,78 @@ class FGuid:
 
 
 class FCompactIndex:
+    """Compactly encoded 32-bit signed index.
+
+    Declared in Core/Inc/UnArc.h:216; the implementation lives in the prebuilt
+    Core.lib. Ported from the disassembled serializer in Help/PACKAGES.md
+    ("Compact Indices"): B0 holds the sign in 0x80 and a "more bytes follow"
+    marker in 0x40 plus the low 6 bits, followed by up to four 7-bit bytes.
+    """
+
     def __init__(self, value: int = 0):
         self.value = value
-    
+
     def encode(self) -> bytes:
-        if self.value == 0:
-            return bytes([0])
-        result = []
-        val = self.value
-        if val < 0:
-            val = -val | (1 << 31)
-        while val >= 0x80:
-            result.append((val & 0x7F) | 0x80)
-            val >>= 7
-        result.append(val & 0x7F)
-        return bytes(result)
-    
+        """Write path of operator<<(FArchive&, FCompactIndex&)."""
+        original = self.value
+        v = abs(self.value)
+        b0 = (0 if self.value >= 0 else 0x80) + (v if v < 0x40 else (v & 0x3F) + 0x40)
+        out = bytearray([b0 & 0xFF])
+        if b0 & 0x40:
+            v >>= 6
+            b1 = v if v < 0x80 else (v & 0x7F) + 0x80
+            out.append(b1 & 0xFF)
+            if b1 & 0x80:
+                v >>= 7
+                b2 = v if v < 0x80 else (v & 0x7F) + 0x80
+                out.append(b2 & 0xFF)
+                if b2 & 0x80:
+                    v >>= 7
+                    b3 = v if v < 0x80 else (v & 0x7F) + 0x80
+                    out.append(b3 & 0xFF)
+                    if b3 & 0x80:
+                        v >>= 7
+                        out.append(v & 0xFF)
+        # The C++ serializer appErrorf()s when saving changes the value; do the
+        # same so an unrepresentable index can't be written out silently.
+        if FCompactIndex.decode(bytes(out))[0].value != original:
+            raise ValueError(f"FCompactIndex: {original} does not survive encoding")
+        return bytes(out)
+
+    @staticmethod
+    def decode(data: bytes, offset: int = 0) -> tuple['FCompactIndex', int]:
+        """Read path of operator<<(FArchive&, FCompactIndex&).
+
+        Returns the index and the offset just past it. The reconstructed value
+        wraps to a signed 32-bit int, as the C++ INT does.
+        """
+        pos = offset
+        b0 = data[pos]
+        pos += 1
+        value = 0
+        if b0 & 0x40:
+            b1 = data[pos]
+            pos += 1
+            if b1 & 0x80:
+                b2 = data[pos]
+                pos += 1
+                if b2 & 0x80:
+                    b3 = data[pos]
+                    pos += 1
+                    if b3 & 0x80:
+                        value = data[pos]
+                        pos += 1
+                    value = (value << 7) + (b3 & 0x7F)
+                value = (value << 7) + (b2 & 0x7F)
+            value = (value << 7) + (b1 & 0x7F)
+        value = (value << 6) + (b0 & 0x3F)
+        if b0 & 0x80:
+            value = -value
+        value &= 0xFFFFFFFF
+        if value >= 0x80000000:
+            value -= 0x100000000
+        return FCompactIndex(value), pos
+
     def __repr__(self) -> str:
         return f"FCompactIndex({self.value})"
 
