@@ -20,6 +20,15 @@ from .types import (
     THRESH_VECTORS_ARE_PARALLEL,
 )
 
+from .names import EName, HARDCODED_NAMES, NAME_PROBEMIN, NAME_PROBEMAX
+
+from .objver import (
+    ENGINE_MIN_NET_VERSION, ENGINE_VERSION, ENGINE_NEGOTIATION_VERSION,
+    PACKAGE_FILE_TAG, PACKAGE_FILE_VERSION, PACKAGE_FILE_VERSION_LICENSEE,
+    PACKAGE_MIN_VERSION, VERSION_ENGINE_ONLY,
+    VER_GUID_AND_GENERATIONS, VER_SIZED_NAME_TABLE,
+)
+
 from .objects import (
     UObject, UClass, UStruct, UFunction, UState,
     UField, UEnum, UConst,
@@ -78,4 +87,9 @@ __all__ = [
     'FIntersectPlanes2', 'FIntersectPlanes3',
     'FBoxPushOut', 'VRand', 'RandomSpreadVector',
     'FQuatDot', 'FQuatError', 'AlignFQuatWith', 'SlerpQuat', 'CombineTransforms',
+    'EName', 'HARDCODED_NAMES', 'NAME_PROBEMIN', 'NAME_PROBEMAX',
+    'ENGINE_MIN_NET_VERSION', 'ENGINE_VERSION', 'ENGINE_NEGOTIATION_VERSION',
+    'PACKAGE_FILE_TAG', 'PACKAGE_FILE_VERSION', 'PACKAGE_FILE_VERSION_LICENSEE',
+    'PACKAGE_MIN_VERSION', 'VERSION_ENGINE_ONLY',
+    'VER_GUID_AND_GENERATIONS', 'VER_SIZED_NAME_TABLE',
 ]

@@ -7,7 +7,13 @@ import struct
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-SIGNATURE_UT = 0x9E2A83C1
+from ut99py.core.objver import (
+    PACKAGE_FILE_TAG,
+    VER_GUID_AND_GENERATIONS,
+    VER_SIZED_NAME_TABLE,
+)
+
+SIGNATURE_UT = PACKAGE_FILE_TAG
 
 
 class PackageReader:
@@ -135,7 +141,7 @@ class PackageReader:
         header['import_count'] = self._read_uint32()
         header['import_offset'] = self._read_uint32()
         
-        if header['version'] >= 68:
+        if header['version'] >= VER_GUID_AND_GENERATIONS:
             # GUID (16 bytes)
             header['guid'] = self._data[self._offset:self._offset+16].hex().upper()
             self._offset += 16
@@ -158,7 +164,7 @@ class PackageReader:
         
         names = []
         for _ in range(self._header['name_count']):
-            if self._header['version'] < 64:
+            if self._header['version'] < VER_SIZED_NAME_TABLE:
                 # Old format: null-terminated string
                 name = self._read_string()
             else:

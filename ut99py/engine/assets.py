@@ -22,8 +22,9 @@ from ..core.types import (
 )
 from ..core.objects import UObject, UClass
 from ..core.system import FArchive, FArchiveFileReader, GLog
+from ..core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
 
-SIGNATURE_UT = 0x9E2A83C1
+SIGNATURE_UT = PACKAGE_FILE_TAG
 
 
 class EPackageFlags(IntEnum):
@@ -66,14 +67,14 @@ class FPackageFileSummary:
         self._magic = ar._read_uint32()
         
         # Check magic (0x9e2a83c1 for UT packages)
-        if self._magic != 0x9e2a83c1:
+        if self._magic != SIGNATURE_UT:
             import warnings
             warnings.warn(f"Unknown package magic: 0x{self._magic:08x}")
         
         self._file_version = ar._read_uint32()
         self._licensee_version = ar._read_uint32()
         
-        if self._file_version >= 68:
+        if self._file_version >= VER_GUID_AND_GENERATIONS:
             self._package_flags = ar._read_int32()
         
         self._name_count = ar._read_int32()
@@ -323,7 +324,7 @@ class AssetLoader:
             imp._class_name = FName(ar._read_string())
             imp._package_index = ar._read_int32()
             imp._object_name = FName(ar._read_string())
-            if package._file_version >= 68:
+            if package._file_version >= VER_GUID_AND_GENERATIONS:
                 imp._x_level = ar._read_bool()
             package._imports.append(imp)
     
