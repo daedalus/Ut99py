@@ -3,10 +3,21 @@
 from .types import (
     FName, FString, FTime,
     FVector, FPlane, FRotator, FQuat, FMatrix,
+    FCoords, FScale, FModelCoords, GMath, FGlobalMath,
     TArray, TMap,
-    FGuid, FCompactIndex,
+    FGuid, FCompactIndex, FBox, FSphere,
     PI, SMALL_NUMBER, KINDA_SMALL_NUMBER,
     MAXBYTE, MAXWORD, MAXDWORD, MAXINT, INDEX_NONE,
+    FSnap, FSheerSnap, FNextPowerOfTwo, FAddAngleConfined, ReduceAngle,
+    FDist, FDistSquared, FPointsAreSame, FPointsAreNear,
+    FPointPlaneDist, FParallel, FCoplanar, FTriple,
+    FLinePlaneIntersection, FLinePlaneIntersectionPlane,
+    FIntersectPlanes2, FIntersectPlanes3,
+    FBoxPushOut, VRand, RandomSpreadVector,
+    FQuatDot, FQuatError, AlignFQuatWith, SlerpQuat, CombineTransforms,
+    SHEER_None, SHEER_XY, SHEER_XZ, SHEER_YX, SHEER_YZ, SHEER_ZX, SHEER_ZY,
+    THRESH_POINT_ON_PLANE, THRESH_POINTS_ARE_SAME, THRESH_POINTS_ARE_NEAR,
+    THRESH_VECTORS_ARE_PARALLEL,
 )
 
 from .objects import (
@@ -40,8 +51,9 @@ from .system import (
 __all__ = [
     'FName', 'FString', 'FTime',
     'FVector', 'FPlane', 'FRotator', 'FQuat', 'FMatrix',
+    'FCoords', 'FScale', 'FModelCoords', 'GMath', 'FGlobalMath',
     'TArray', 'TMap',
-    'FGuid', 'FCompactIndex',
+    'FGuid', 'FCompactIndex', 'FBox', 'FSphere',
     'PI', 'SMALL_NUMBER', 'KINDA_SMALL_NUMBER',
     'MAXBYTE', 'MAXWORD', 'MAXDWORD', 'MAXINT', 'INDEX_NONE',
     'UObject', 'UClass', 'UStruct', 'UFunction', 'UState',
@@ -59,4 +71,11 @@ __all__ = [
     'FConfigCacheIni',
     'GNull', 'GLog', 'GError',
     'FFileManager',
+    'FSnap', 'FSheerSnap', 'FNextPowerOfTwo', 'FAddAngleConfined', 'ReduceAngle',
+    'FDist', 'FDistSquared', 'FPointsAreSame', 'FPointsAreNear',
+    'FPointPlaneDist', 'FParallel', 'FCoplanar', 'FTriple',
+    'FLinePlaneIntersection', 'FLinePlaneIntersectionPlane',
+    'FIntersectPlanes2', 'FIntersectPlanes3',
+    'FBoxPushOut', 'VRand', 'RandomSpreadVector',
+    'FQuatDot', 'FQuatError', 'AlignFQuatWith', 'SlerpQuat', 'CombineTransforms',
 ]

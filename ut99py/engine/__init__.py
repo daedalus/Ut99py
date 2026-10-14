@@ -18,9 +18,10 @@ from enum import IntEnum
 
 from ..core import (
     UObject, UClass, UStruct, UFunction, UState, UPackage,
-    FVector, FRotator, FPlane, FQuat, FMatrix,
+    FVector, FRotator, FPlane, FQuat, FMatrix, FCoords, FScale, FModelCoords,
     FName, FString, TArray, TMap,
     FArchive, FOutputDevice,
+    GMath,
 )
 
 if TYPE_CHECKING:
@@ -296,22 +297,6 @@ class AActor(UObject):
     
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.get_full_name()} at {self._location}>"
-
-
-class FCoords:
-    __slots__ = ('origin', 'x', 'y', 'z')
-    
-    def __init__(self):
-        self.origin = FVector()
-        self.x = FVector(1, 0, 0)
-        self.y = FVector(0, 1, 0)
-        self.z = FVector(0, 0, 1)
-    
-    def __truediv__(self, other: FVector) -> 'FCoords':
-        return FCoords()
-    
-    def __mul__(self, other: FVector) -> 'FCoords':
-        return FCoords()
 
 
 class ABrush(AActor):

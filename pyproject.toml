@@ -7,7 +7,7 @@ name = "ut99py"
 version = "0.0.3"
 description = "Unreal Tournament 99 Python Port with OpenGL/Vulkan graphics"
 requires-python = ">=3.10"
-dependencies = ["PyOpenGL", "PySide6"]
+dependencies = ["PyOpenGL", "PySide6", "numpy"]
 classifiers = ["Programming Language :: Python :: 3.10", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12"]
 
 [tool.setuptools.packages.find]
