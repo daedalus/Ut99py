@@ -8,6 +8,10 @@ from ut99py.core.objver import (
 from ut99py.core.types import FTime, FGuid, FVector, FRotator, INDEX_NONE
 from ut99py.core.system import AR_INDEX
 
+# sizeof(FGuid); the pre-68 heritage list at HeritageOffset is an array of them
+# (UnLinker.h:158).
+HERITAGE_GUID_SIZE = 16
+
 
 class FObjectExport:
     def __init__(self):
@@ -110,7 +114,12 @@ class FPackageFileSummary:
             heritage_count = ar.serialize_int32(0)
             heritage_offset = ar.serialize_int32(0)
             saved = ar.tell()
-            if heritage_count:
+            # Deviates from UnLinker.h:158, which trusts HeritageCount and runs
+            # the loop regardless; a bogus count there spins for as many
+            # iterations as the file claims. So read the list only when it fits.
+            list_end = heritage_offset + heritage_count * HERITAGE_GUID_SIZE
+            list_fits = heritage_offset >= 0 and list_end <= ar.total_size()
+            if heritage_count and list_fits:
                 ar.seek(heritage_offset)
                 for _ in range(heritage_count):
                     ar >> self.guid

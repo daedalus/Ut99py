@@ -38,6 +38,16 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       `serialize_str` stub is gone. `AR_INDEX` (`UnArc.h:234`) moved next to the
       class it belongs to; `core/linkers.py` imports it.
 - [x] `FArchive.count_bytes` (`UnArc.h:37`) as the no-op the file archives use.
+- [x] Validated against the real install at `/home/dclavijo/Games/UnrealTournament`
+      (310 packages, 0 failures): name/import/export tables agree row for row
+      with `engine/ut_reader.py`, and both version thresholds are exercised by
+      real files — versions 61-66 take the pre-`VER_SIZED_NAME_TABLE` name table
+      and the pre-`VER_GUID_AND_GENERATIONS` heritage header, 64 is the boundary,
+      68/69 carry guid + generations. Pinned by `tests/test_real_packages.py`
+      (skips when the install is absent; `UT99_GAME_DIR` overrides).
+- [x] Runaway heritage loop bounded: `UnLinker.h:158` reads `HeritageCount`
+      GUIDs from `HeritageOffset` whatever the file claims, so a bogus count
+      spins. The port skips the list when it does not fit in the archive.
 
 ## Next
 - [ ] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (needs
@@ -87,3 +97,14 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
   `FString`s for names (UT99 uses ANSI). Reconcile it onto `core/linkers.py`.
 - `assets.py FPackageFileSummary.serialize` reads `PackageFlags` only when
   `file_version >= 68`; C++ reads it unconditionally (see `UnLinker.h`).
+- `FPackageFileSummary.serialize` only follows the pre-68 heritage GUID list
+  when `HeritageOffset + HeritageCount * 16` fits in the archive. UnLinker.h:158
+  runs the loop unconditionally, which a bogus count turns into an unbounded
+  spin.
+- `ULinkerLoad.is_error()` is always false: `read()` delegates to the underlying
+  `FArchiveFileReader`, so the reader's error flag never reaches the linker's
+  own `_error`. Nothing reads it yet, but a caller using it to detect a lost
+  stream would never see one.
+- `ULinker.get_import_full_name`/`get_export_full_name` are approximations: the
+  C++ bodies (`UnLinker.h:207-208`) are in the prebuilt `Core.lib`, and
+  `get_export_full_name` here ignores `PackageIndex` entirely.
