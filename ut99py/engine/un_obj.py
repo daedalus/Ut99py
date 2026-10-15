@@ -6,9 +6,7 @@ related BSP/enums. C++ serializer operators (FArchive& <<)
 are documented but not fully implemented; bodies in prebuilt
 Engine.lib handle persistence.
 """
-from typing import Optional, List, ClassVar
-from enum import IntEnum
-from ..core import UObject, FArchive, FName, FVector, FPlane
+from ..core import UObject, FPlane, FVector, FName
 
 # ------------------------------------------------------------------
 # BSP node flags (EBspNodeFlags)
@@ -26,108 +24,76 @@ class EBspNodeFlags:
     NF_NeverMove = 0
 
 
-# ------------------------------------------------------------------
-# Point region (FPointRegion)
-# ------------------------------------------------------------------
 class FPointRegion:
-    def __init__(
-        self,
-        zone: Optional["AZoneInfo"] = None,
-        i_leaf: int = -1,
-        zone_number: int = 0,
-    ):
+    def __init__(self, zone=None, i_leaf=-1, zone_number=0):
         self.zone = zone
         self.i_leaf = i_leaf
         self.zone_number = zone_number
 
 
-# ------------------------------------------------------------------
-# BSP node (FBspNode)
-# ------------------------------------------------------------------
 class FBspNode:
     MAX_NODE_VERTICES = 16
     MAX_FINAL_VERTICES = 24
     MAX_ZONES = 64
 
     def __init__(self):
-        self.plane: FPlane = FPlane()
-        self.zone_mask: int = 0
-        self.i_vert_pool: int = 0
-        self.i_surf: int = 0
-        # Union iBack / iChild[1]
-        self.i_back: int = 0
-        self.i_front: int = 0
-        self.i_plane: int = -1  # INDEX_NONE equivalent
-        self.i_collision_bound: int = 0
-        self.i_render_bound: int = 0
-        self.i_zone: List[int] = [0, 0]
-        self.num_vertices: int = 0
-        self.node_flags: int = 0
-        self.i_leaf: List[int] = [-1, -1]  # INDEX_NONE = -1
+        self.plane = FPlane()
+        self.zone_mask = 0
+        self.i_vert_pool = 0
+        self.i_surf = 0
+        self.i_back = 0
+        self.i_front = 0
+        self.i_plane = -1
+        self.i_collision_bound = 0
+        self.i_render_bound = 0
+        self.i_zone = [0, 0]
+        self.num_vertices = 0
+        self.node_flags = 0
+        self.i_leaf = [-1, -1]
 
-    def is_csg(self, extra_flags: int = 0) -> bool:
-        return (
-            self.num_vertices > 0
-            and not (self.node_flags & (EBspNodeFlags.NF_IsNew | EBspNodeFlags.NF_NotCsg | extra_flags))
-        )
+    def is_csg(self, extra_flags=0):
+        return (self.num_vertices > 0
+                and not (self.node_flags & (EBspNodeFlags.NF_IsNew | EBspNodeFlags.NF_NotCsg | extra_flags)))
 
-    def child_outside(self, i_child: int, outside: bool, extra_flags: int = 0) -> bool:
+    def child_outside(self, i_child, outside, extra_flags=0):
         if i_child:
             return outside or self.is_csg(extra_flags)
         return outside and not self.is_csg(extra_flags)
 
 
-# ------------------------------------------------------------------
-# Zone properties (FZoneProperties)
-# ------------------------------------------------------------------
 class FZoneProperties:
     def __init__(self):
-        self.zone_actor: Optional["AZoneInfo"] = None
-        self.last_render_time: float = 0.0
-        self.connectivity: int = 0
-        self.visibility: int = 0
+        self.zone_actor = None
+        self.last_render_time = 0.0
+        self.connectivity = 0
+        self.visibility = 0
 
 
-# ------------------------------------------------------------------
-# BSP leaf (FLeaf)
-# ------------------------------------------------------------------
 class FLeaf:
-    def __init__(
-        self,
-        i_zone: int = 0,
-        i_permeating: int = 0,
-        i_volumetric: int = 0,
-        visible_zones: int = 0,
-    ):
+    def __init__(self, i_zone=0, i_permeating=0, i_volumetric=0, visible_zones=0):
         self.i_zone = i_zone
         self.i_permeating = i_permeating
         self.i_volumetric = i_volumetric
         self.visible_zones = visible_zones
 
 
-# ------------------------------------------------------------------
-# BSP surface (FBspSurf)
-# ------------------------------------------------------------------
 class FBspSurf:
     def __init__(self):
-        self.texture: Optional["UTexture"] = None
-        self.poly_flags: int = 0
-        self.p_base: int = 0
-        self.v_normal: int = 0
-        self.v_texture_u: int = 0
-        self.v_texture_v: int = 0
-        self.i_light_map: int = 0
-        self.i_brush_poly: int = 0
-        self.pan_u: int = 0
-        self.pan_v: int = 0
-        self.actor: Optional["ABrush"] = None
-        self.decals: List["FDecal"] = []
-        self.nodes: List[int] = []
+        self.texture = None
+        self.poly_flags = 0
+        self.p_base = 0
+        self.v_normal = 0
+        self.v_texture_u = 0
+        self.v_texture_v = 0
+        self.i_light_map = 0
+        self.i_brush_poly = 0
+        self.pan_u = 0
+        self.pan_v = 0
+        self.actor = None
+        self.decals = []
+        self.nodes = []
 
 
-# ------------------------------------------------------------------
-# Polygon flags (EPolyFlags)
-# ------------------------------------------------------------------
 class EPolyFlags:
     PF_Invisible = 0x00000001
     PF_Masked = 0x00000002
@@ -167,7 +133,6 @@ class EPolyFlags:
     PF_RenderFog = 0x40000000
     PF_Occlude = 0x80000000
     PF_RenderHint = 0x01000000
-
     PF_NoOcclude = PF_Masked | PF_Translucent | PF_Invisible | PF_Modulated
     PF_NoEdit = PF_Memorized | PF_Selected | PF_EdProcessed | PF_NoMerge | PF_EdCut
     PF_NoImport = PF_NoEdit | PF_NoMerge | PF_Memorized | PF_Selected | PF_EdProcessed | PF_EdCut
@@ -177,34 +142,25 @@ class EPolyFlags:
     PF_Transient = PF_Highlighted
 
 
-# ------------------------------------------------------------------
-# Shadow mask (FShadowMask)
-# ------------------------------------------------------------------
 class FShadowMask:
     def __init__(self):
-        self.owner: Optional["AActor"] = None
-        self.shadow_data: List[int] = []
+        self.owner = None
+        self.shadow_data = []
 
 
-# ------------------------------------------------------------------
-# Light map index (FLightMapIndex)
-# ------------------------------------------------------------------
 class FLightMapIndex:
     def __init__(self):
-        self.data_offset: int = 0
-        self.i_light_actors: int = 0
-        self.pan: FVector = FVector()
-        self.u_scale: float = 1.0
-        self.v_scale: float = 1.0
-        self.u_clamp: int = 0
-        self.v_clamp: int = 0
-        self.u_bits: int = 0
-        self.v_bits: int = 0
+        self.data_offset = 0
+        self.i_light_actors = 0
+        self.pan = FVector()
+        self.u_scale = 1.0
+        self.v_scale = 1.0
+        self.u_clamp = 0
+        self.v_clamp = 0
+        self.u_bits = 0
+        self.v_bits = 0
 
 
-# ------------------------------------------------------------------
-# Split type (ESplitType)
-# ------------------------------------------------------------------
 class ESplitType:
     SP_Coplanar = 0
     SP_Front = 1
@@ -212,32 +168,29 @@ class ESplitType:
     SP_Split = 3
 
 
-# ------------------------------------------------------------------
-# General-purpose polygon (FPoly)
-# ------------------------------------------------------------------
 class FPoly:
     MAX_VERTICES = 16
-    VERTEX_THRESHOLD = MAX_VERTICES - 2  # 14
+    VERTEX_THRESHOLD = 14
 
     def __init__(self):
-        self.base: FVector = FVector()
-        self.normal: FVector = FVector()
-        self.texture_u: FVector = FVector()
-        self.texture_v: FVector = FVector()
-        self.vertex: List[FVector] = [FVector() for _ in range(self.MAX_VERTICES)]
-        self.poly_flags: int = 0
-        self.actor: Optional["ABrush"] = None
-        self.texture: Optional["UTexture"] = None
-        self.item_name: FName = FName()
-        self.num_vertices: int = 0
-        self.i_link: int = 0
-        self.i_brush_poly: int = 0
-        self.pan_u: int = 0
-        self.pan_v: int = 0
-        self.save_poly_index: int = 0
-        self.b_face_drag_sel: bool = False
+        self.base = FVector()
+        self.normal = FVector()
+        self.texture_u = FVector()
+        self.texture_v = FVector()
+        self.vertex = [FVector() for _ in range(self.MAX_VERTICES)]
+        self.poly_flags = 0
+        self.actor = None
+        self.texture = None
+        self.item_name = FName()
+        self.num_vertices = 0
+        self.i_link = 0
+        self.i_brush_poly = 0
+        self.pan_u = 0
+        self.pan_v = 0
+        self.save_poly_index = 0
+        self.b_face_drag_sel = False
 
-    def init(self) -> None:
+    def init(self):
         self.base = FVector()
         self.normal = FVector()
         self.texture_u = FVector()
@@ -254,53 +207,42 @@ class FPoly:
         self.save_poly_index = 0
         self.b_face_drag_sel = False
 
-    def reverse(self) -> None:
+    def reverse(self):
         for i in range(self.num_vertices // 2):
             j = self.num_vertices - i - 1
             self.vertex[i], self.vertex[j] = self.vertex[j], self.vertex[i]
         self.normal = -self.normal
 
-    def is_backfaced(self, point: FVector) -> bool:
+    def is_backfaced(self, point):
         return (point - self.base) | self.normal < 0.0
 
-    def is_coplanar(self, test: "FPoly") -> bool:
-        return (
-            abs((self.base - test.base) | self.normal) < 0.01
-            and abs(self.normal | test.normal) > 0.9999
-        )
+    def is_coplanar(self, test):
+        return (abs((self.base - test.base) | self.normal) < 0.01
+                and abs(self.normal | test.normal) > 0.9999)
 
 
-# ------------------------------------------------------------------
-# List of FPolys (UPolys) — UObject subclass
-# ------------------------------------------------------------------
 class UPolys(UObject):
     def __init__(self):
         super().__init__()
-        self.element: List[FPoly] = []
+        self.element = []
 
-    def serialize(self, ar: FArchive) -> "UPolys":
+    def serialize(self, ar):
         super().serialize(ar)
         ar << self.element
         return self
 
 
-# ------------------------------------------------------------------
-# BSP vertex (FVert)
-# ------------------------------------------------------------------
 class FVert:
-    def __init__(self, p_vertex: int = 0, i_side: int = -1):
+    def __init__(self, p_vertex=0, i_side=-1):
         self.p_vertex = p_vertex
         self.i_side = i_side
 
 
-# ------------------------------------------------------------------
-# Decal (FDecal)
-# ------------------------------------------------------------------
 class FDecal:
     def __init__(self):
-        self.vertices: List[FVector] = [FVector() for _ in range(4)]
-        self.actor: Optional["ADecal"] = None
-        self.nodes: List[int] = []
+        self.vertices = [FVector() for _ in range(4)]
+        self.actor = None
+        self.nodes = []
 
 
 __all__ = [
