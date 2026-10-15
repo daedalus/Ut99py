@@ -62,9 +62,9 @@ def main():
     actor3 = AActor()
     actor3.location = FVector(1000, -500, 0)
     actor3._name = "Actor3"
-    level._actors.extend([actor1, actor2, actor3])
+    level.Actors.extend([actor1, actor2, actor3])
 
-    for a in level._actors:
+    for a in level.Actors:
         print(f"      * {a._name} at {a.location}")
 
     print("  [NET] Networking...")

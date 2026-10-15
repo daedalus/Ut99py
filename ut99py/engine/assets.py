@@ -20,7 +20,7 @@ from ..core.types import (
     FName, FGuid, FVector, FRotator, FPlane,
     TArray,
 )
-from ..core.objects import UObject, UClass
+from ..core.objects import UObject, UClass, UPackage
 from ..core.system import FArchive, FArchiveFileReader, GLog
 from ..core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
 
@@ -88,7 +88,6 @@ class FPackageFileSummary:
         
         if self._file_version >= 70:
             self._dependency_table_offset = ar._read_int32()
-        
         if self._file_version >= 74:
             self._thumbnail_offset = ar._read_int64()
         
@@ -143,7 +142,8 @@ class UPackage(UObject):
     """
     
     def __init__(self, name: str = ""):
-        super().__init__(name)
+        super().__init__()
+        self._name = FName(name)
         self._guid: FGuid = FGuid()
         self._flags: int = 0
         self._file_version: int = 0
@@ -305,13 +305,34 @@ class AssetLoader:
         package._filename = ar._file.name if hasattr(ar, '_file') else ""
     
     def _load_name_table(self, package: UPackage, ar: FArchive) -> None:
-        """Load name table (FName entries)"""
+        """Load name table (FName entries)
+
+        For package files version < 70 (pre-UE2), names are null-terminated
+        ASCII strings followed by 4-byte flags, not length-prefixed UTF-16.
+        Version 70+ packages (and newer Unreal Engine versions) use length-prefixed
+        format handled by serialize_name.
+        """
         ar.seek(package._summary._name_offset)
         
+        # Determine name format by file version
+        null_terminated = package._file_version < 70
+        
         for _ in range(package._summary._name_count):
-            name = ar._read_string()
-            flags = ar._read_int32()
-            fname = FName(name, flags)
+            if null_terminated:
+                # Null-terminated ASCII name + 4-byte flags (v61 format)
+                chars = []
+                while True:
+                    b = ar._read_byte()
+                    if b == 0:
+                        break
+                    chars.append(b)
+                name_str = bytes(chars).decode('latin-1', errors='replace')
+                flags = ar._read_int32() if ar.read(4) else 0
+            else:
+                # Length-prefixed UTF-16 name (v70+ format)
+                name_str = ar._read_string()
+                flags = ar._read_int32()
+            fname = FName(name_str, flags)
             package._name_table.append(fname)
     
     def _load_import_table(self, package: UPackage, ar: FArchive) -> None:
@@ -342,6 +363,57 @@ class AssetLoader:
             exp._serial_size = ar._read_int32()
             exp._serial_offset = ar._read_int32()
             package._exports.append(exp)
+            
+    def _deserialize_exports(self, package: UPackage, ar: FArchive) -> None:
+        """Deserialize exported objects from package archive"""
+        # Create a temporary linker for resolving object references
+        linker = ULinkerLoad()
+        linker._exports = package._exports
+        linker._imports = package._imports
+        package._source_linker = linker
+        
+        # Set archive to loading mode and attach linker
+        ar._loading = True
+        ar._linker = linker
+        
+        # Deserialize each exported object
+        for exp in package._exports:
+            # Seek to object's serialized data
+            ar.seek(exp._serial_offset)
+            
+            # Determine object class from export entry
+            class_index = exp._class_index
+            if class_index == 0:
+                # Index 0 means UObject (usually indicates an error or placeholder)
+                continue
+                
+            # For now, we'll create placeholder objects
+            # Full implementation would resolve class_index to actual UClass
+            # and instantiate the correct object type
+            if exp._object_name.get_text().lower().endswith('_tex') or \
+               exp._object_name.get_text().lower().endswith('texture'):
+                # Likely a texture
+                texture = UTexture()
+                texture._name = exp._object_name
+                texture._package = package
+                texture.serialize(ar)  # This will deserialize texture properties
+                exp._object = texture
+            elif 'level' in exp._object_name.get_text().lower():
+                # Likely a level
+                from ..engine.level import ULevel
+                level = ULevel()
+                level._name = exp._object_name
+                level._package = package
+                level.serialize_level(ar)  # This will deserialize level data
+                exp._object = level
+            else:
+                # Generic object - create UObject placeholder
+                from ..core.objects import UObject
+                obj = UObject()
+                obj._name = exp._object_name
+                obj._package = package
+                # Skip serialization for now
+                exp._object = obj
     
     def get_texture(self, package_name: str, texture_name: str) -> Optional['UTextureAsset']:
         """Load texture from package

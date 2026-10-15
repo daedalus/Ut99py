@@ -1073,6 +1073,7 @@ from .skeletal_mesh import (
     MotionChunk, TrackDiffs, VVertex, VPoint, VTriangle,
     USkelImport, USkeletalMesh, UAnimation,
 )
+from .texture import UTexture, FTextureInfo
 from .assets import (
     AssetLoader, GAssetLoader,
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
@@ -1087,10 +1088,14 @@ from .net import (
     best_signed_difference,
     make_relative,
 )
+from .render import (
+    ORTHO_LOW_DETAIL, FOutVector, FTransform, FTransSample, FTransTexture,
+    FSurfaceInfo, FSavedPoly, FSurfaceFacet, FScreenBounds, ELineFlags,
+    URenderBase, HBspSurf, HActor, HCoords,
+)
 from .render_structs import (
     FSceneNode, FSpanBuffer, FSpan, FRasterPoly,
-    FTransTexture, FScreenBounds, FSurfaceInfo, FSurfaceFacet,
-    FDynamicItem, FDynamicSprite, FBspDrawList, FSavedPoly, ELineFlags,
+    FDynamicItem, FDynamicSprite, FBspDrawList,
 )
 from .camera import (
     ETextOut, EViewportBlitFlags, ERenderType, EViewportCaps,
