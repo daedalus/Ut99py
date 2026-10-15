@@ -12,6 +12,11 @@ from typing import TypeVar, Generic, Iterator, Iterable, Optional, Any
 from collections.abc import MutableSequence, Sequence
 from abc import ABC, abstractmethod
 
+# Fundamental C++ types (UnGnuG.h) — used by archive serializers.
+BYTE = int; TCHAR = str; SBYTE = int; _WORD = int; SWORD = int
+DWORD = int; QWORD = int; SQWORD = int; INT = int; FLOAT = float
+UBOOL = bool; WORD = int
+
 PI = 3.1415926535897932
 SMALL_NUMBER = 1e-8
 KINDA_SMALL_NUMBER = 1e-4
