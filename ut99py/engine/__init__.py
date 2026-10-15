@@ -1083,6 +1083,10 @@ from .level import (
     FNetworkNotify, FCollisionHashBase, g_new_collision_hash,
     NUM_LEVEL_TEXT_BLOCKS, ULevelBase, ULevel, FStaticBrushIterator,
 )
+from .net import (
+    best_signed_difference,
+    make_relative,
+)
 from .render_structs import (
     FSceneNode, FSpanBuffer, FSpan, FRasterPoly,
     FTransTexture, FScreenBounds, FSurfaceInfo, FSurfaceFacet,
