@@ -11,6 +11,7 @@ Ported from Ut99PubSrc/Engine/
 - URenderDevice: Rendering device interface
 - UTexture, UMaterial: Texture and material system
 - UMesh, USkeletalMesh: Mesh systems
+- ULevelBase: Base level class
 """
 
 from typing import TYPE_CHECKING, Optional, Any, ClassVar
@@ -1076,6 +1077,11 @@ from .assets import (
     AssetLoader, GAssetLoader,
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
     FPackageFileSummary, FObjectExport, FObjectImport,
+)
+from .level import (
+    EAcceptConnection, ETraceActorFlags, ELevelTick,
+    FNetworkNotify, FCollisionHashBase, g_new_collision_hash,
+    NUM_LEVEL_TEXT_BLOCKS, ULevelBase, ULevel, FStaticBrushIterator,
 )
 from .render_structs import (
     FSceneNode, FSpanBuffer, FSpan, FRasterPoly,
