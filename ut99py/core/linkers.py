@@ -399,6 +399,8 @@ class ULinkerLoad(ULinker, FArchive):
 class ULinkerSave(ULinker, FArchive):
     def __init__(self, parent: Optional[UObject], filename: str):
         super().__init__()
+        FArchive.__init__(self)  # second base; UObject.__init__ does not chain here
+        self._saving = True
         self.saver: Optional[FArchive] = None
         self.filename = filename
         self.object_indices: List[int] = []
@@ -424,6 +426,35 @@ class ULinkerSave(ULinker, FArchive):
         if self.saver:
             return self.saver.tell()
         return 0
+
+    # ULinkerSave::Serialize (UnLinker.h:333) forwards every write to Saver.
+    def write(self, data: bytes) -> int:
+        if self.saver is None:
+            raise NotImplementedError("ULinkerSave needs a live Saver (UnLinker.h:306)")
+        return self.saver.write(data)
+
+    def serialize_name(self, name: FName) -> FName:
+        """ULinkerSave::operator<<(FName&) (UnLinker.h:317): NameIndices maps the
+        name's global index to its index in the saved name table, written as a
+        compact index."""
+        save = self.name_indices[name.get_index()]
+        AR_INDEX(self, save)
+        return name
+
+    def serialize_object(self, obj: Optional[UObject]) -> Optional[UObject]:
+        """ULinkerSave::operator<<(UObject*&) (UnLinker.h:324): a NULL object
+        maps to index 0."""
+        save = self.object_indices[obj.get_index()] if obj else 0
+        AR_INDEX(self, save)
+        return obj
+
+    def _serialize(self, value: Any) -> Any:
+        """ULinkerSave overrides operator<< for FName (UnLinker.h:317) and
+        UObject (UnLinker.h:324)."""
+        self._check_direction()
+        if isinstance(value, UObject):
+            return self.serialize_object(value)
+        return super()._serialize(value)
 
 
 class FLazyLoader:

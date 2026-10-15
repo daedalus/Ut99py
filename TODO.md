@@ -82,7 +82,15 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       index and resolves it through the export/import tables. `CreateExport`/
       `CreateImport` are structural stubs returning the table entry as the
       placeholder object, because the C++ construction bodies are in Core.lib.
-- [ ] `ULinkerSave::operator<<(FName&/UObject*&)` (needs a live `Saver`).
+- [x] `ULinkerSave::operator<<(FName&)` (:317) / `operator<<(UObject*&)` (:324) →
+      `core/linkers.py`: the two operators map the operand's global index through
+      `NameIndices`/`ObjectIndices` and write it as a compact index (a NULL object
+      maps to 0). `ULinkerSave` now initialises the `FArchive` base and forwards
+      `write` to `Saver` (UnLinker.h:333), raising if there is no Saver. Added
+      `UObject.get_index` (UnObjBas.h:651) and wired the previously-dead
+      `__post_init__` object-table registration (GObjObjects/`AddObject`,
+      UnObjBas.h:494), so `GetIndex` now returns a real slot. Pinned by
+      `tests/test_linkers_save.py`.
 - [ ] `engine/mesh.py`: `UMesh`/`ULodMesh` still hold plain `List[...]` and
       their `FMesh*` structs have no serializers, so `ar << self.verts` dies in
       `_serialize`. Needs the real `UMesh::Serialize` (Engine/Src is absent from

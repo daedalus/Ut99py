@@ -197,8 +197,13 @@ class UObject(ABC):
         self._internal_index: int = INDEX_NONE
         self._flags: int = 0
         self._index: int = INDEX_NONE
+        self.__post_init__()
     
     def __post_init__(self):
+        # Registration into the global object table (GObjObjects); the C++
+        # does this via UObject::AddObject (UnObjBas.h:494), with no
+        # StaticAllocateObject in the port yet. UObject::GetIndex
+        # (UnObjBas.h:651) reports the slot assigned here.
         UObject._all_objects.append(self)
         self._internal_index = len(UObject._all_objects) - 1
         if UObject._app_entry is None:
@@ -225,6 +230,12 @@ class UObject(ABC):
         if self._outer:
             full_name = f"{self._outer.get_full_name()}.{full_name}"
         return full_name
+    
+    def get_index(self) -> int:
+        """UObject::GetIndex (UnObjBas.h:651): the object's index in the global
+        object table GObjObjects, which the port assigns in __post_init__ and
+        exposes as internal_index."""
+        return self._internal_index
     
     def get_outer_most(self) -> 'UObject':
         obj = self
