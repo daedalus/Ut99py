@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Survey port coverage: which C++ headers are ported, what is pending.
 
-AST-parses every Python module under ``ut99py/`` for the headers it cites
+AST-parses every Python module under ``Ut99py/`` for the headers it cites
 (``Ported from ...`` / ``Core/Inc/...`` / ``Engine/Inc/...`` in docstrings
 and comments) and regex-scans the C++ tree (default ``~/code/Ut99PubSrc``)
 for classes/structs/enums per header. Prints:
@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PY_DIR = REPO_ROOT / "ut99py"
+PY_DIR = REPO_ROOT / "Ut99py"
 DEFAULT_CPP_DIR = Path(os.path.expanduser("~/code/Ut99PubSrc"))
 
 # Headers a Python module may cite, e.g. "Port of Core/Inc/UnArc.h".
