@@ -1,3 +1,15 @@
+"""Port of Engine/Inc/UnTex.h texture classes.
+
+Structs/enums ported 1-to-1 from UnTex.h: FColor (:39), UPalette (:116),
+ELODSet (:140), FMipmapBase (:153), FMipmap (:173), ETextureFormat
+(:215), UBitmap (:230), UTexture (:261), FTextureInfo (:366),
+FFontCharacter (:411), FFontPage (:429), UFont (:450). NUM_PAL_COLORS
+(:13) and MAX_MIPS (:365) are module constants. C++ bodies in the
+prebuilt Engine.lib (UBitmap::Lock/Unlock, UTexture::Tick/Update) raise
+NotImplementedError here; the C++ derives UTexture from UBitmap which
+derives from UObject (Engine.lib construction path, see TODO.md).
+"""
+
 from typing import Optional, List
 from ut99py.core import FName, FString, UObject, FArchive
 from ut99py.core.types import FTime
@@ -5,6 +17,7 @@ from ut99py.graphics import URenderDevice
 
 NUM_PAL_COLORS = 256
 MAX_MIPS = 12
+
 
 class FColor:
     def __init__(self, r: int = 0, g: int = 0, b: int = 0, a: int = 255):
@@ -20,28 +33,43 @@ class FColor:
         return (2.0 * self.r + 3.0 * self.g + 1.0 * self.b) / (6.0 * 256.0)
 
     def true_color(self) -> int:
-        return ((self.r & 0xff) << 16) | ((self.g & 0xff) << 8) | (self.b & 0xff)
+        return ((self.r & 0xFF) << 16) | ((self.g & 0xFF) << 8) | (self.b & 0xFF)
 
     def plane(self) -> tuple:
         return (self.r / 255.0, self.g / 255.0, self.b / 255.0, self.a / 255.0)
 
     @staticmethod
-    def from_plane(p: tuple) -> 'FColor':
+    def from_plane(p: tuple) -> "FColor":
         def clamp(v: float) -> int:
             return max(0, min(255, int(v)))
-        return FColor(clamp(p[0] * 256), clamp(p[1] * 256), clamp(p[2] * 256), clamp(p[3] * 256))
 
-    def __eq__(self, other: 'FColor') -> bool:
-        return self.r == other.r and self.g == other.g and self.b == other.b and self.a == other.a
+        return FColor(
+            clamp(p[0] * 256), clamp(p[1] * 256), clamp(p[2] * 256), clamp(p[3] * 256)
+        )
 
-    def __ne__(self, other: 'FColor') -> bool:
+    def __eq__(self, other: "FColor") -> bool:
+        return (
+            self.r == other.r
+            and self.g == other.g
+            and self.b == other.b
+            and self.a == other.a
+        )
+
+    def __ne__(self, other: "FColor") -> bool:
         return not self.__eq__(other)
 
-    def brighten(self, amount: int) -> 'FColor':
+    def brighten(self, amount: int) -> "FColor":
         p = self.plane()
-        return FColor.from_plane((p[0] * (1.0 - amount / 24.0), p[1] * (1.0 - amount / 24.0), p[2] * (1.0 - amount / 24.0), p[3]))
+        return FColor.from_plane(
+            (
+                p[0] * (1.0 - amount / 24.0),
+                p[1] * (1.0 - amount / 24.0),
+                p[2] * (1.0 - amount / 24.0),
+                p[3],
+            )
+        )
 
-    def serialize(self, ar: FArchive) -> 'FColor':
+    def serialize(self, ar: FArchive) -> "FColor":
         ar << self.r << self.g << self.b << self.a
         return self
 
@@ -51,7 +79,7 @@ class UPalette(UObject):
         super().__init__()
         self.colors: List[FColor] = [FColor() for _ in range(NUM_PAL_COLORS)]
 
-    def serialize(self, ar: FArchive) -> 'UPalette':
+    def serialize(self, ar: FArchive) -> "UPalette":
         super().serialize(ar)
         ar << self.colors
         return self
@@ -83,7 +111,7 @@ class ETextureFormat:
     DXT1 = 0x03
     RGB8 = 0x04
     RGBA8 = 0x05
-    MAX = 0xff
+    MAX = 0xFF
 
 
 class ELODSet:
@@ -95,7 +123,7 @@ class ELODSet:
 
 class UBitmap(UObject):
     format: int = ETextureFormat.P8
-    palette: Optional['UPalette'] = None
+    palette: Optional["UPalette"] = None
     u_bits: int = 0
     v_bits: int = 0
     u_size: int = 0
@@ -106,10 +134,16 @@ class UBitmap(UObject):
     max_color: FColor = FColor()
     __last_update_time: FTime = FTime()
 
-    def lock(self, texture_info: 'FTextureInfo', time: FTime, lod: int, ren_dev: URenderDevice) -> None:
+    def lock(
+        self,
+        texture_info: "FTextureInfo",
+        time: FTime,
+        lod: int,
+        ren_dev: URenderDevice,
+    ) -> None:
         raise NotImplementedError
 
-    def unlock(self, texture_info: 'FTextureInfo') -> None:
+    def unlock(self, texture_info: "FTextureInfo") -> None:
         raise NotImplementedError
 
     def get_mip(self, i: int) -> FMipmapBase:
@@ -119,17 +153,17 @@ class UBitmap(UObject):
 class UTexture(UBitmap):
     def __init__(self):
         super().__init__()
-        self.bump_map: Optional['UTexture'] = None
-        self.detail_texture: Optional['UTexture'] = None
-        self.macro_texture: Optional['UTexture'] = None
+        self.bump_map: Optional["UTexture"] = None
+        self.detail_texture: Optional["UTexture"] = None
+        self.macro_texture: Optional["UTexture"] = None
         self.diffuse: float = 1.0
         self.specular: float = 0.0
         self.alpha: float = 0.0
         self.scale: float = 1.0
         self.friction: float = 1.0
         self.mip_mult: float = 1.0
-        self.footstep_sound: Optional['USound'] = None
-        self.hit_sound: Optional['USound'] = None
+        self.footstep_sound: Optional["USound"] = None
+        self.hit_sound: Optional["USound"] = None
         self.poly_flags: int = 0
         self.b_high_color_quality: bool = False
         self.b_high_texture_quality: bool = False
@@ -138,8 +172,8 @@ class UTexture(UBitmap):
         self.b_realtime_changed: bool = False
         self.b_has_comp: bool = False
         self.lod_set: int = ELODSet.NONE
-        self.anim_next: Optional['UTexture'] = None
-        self.anim_cur: Optional['UTexture'] = None
+        self.anim_next: Optional["UTexture"] = None
+        self.anim_cur: Optional["UTexture"] = None
         self.prime_count: int = 0
         self.prime_current: int = 0
         self.min_frame_rate: float = 10.0
@@ -149,7 +183,7 @@ class UTexture(UBitmap):
         self.comp_mips: List[FMipmap] = []
         self.comp_format: int = ETextureFormat.RGBA8
 
-    def serialize(self, ar: FArchive) -> 'UTexture':
+    def serialize(self, ar: FArchive) -> "UTexture":
         super().serialize(ar)
         ar << self.bump_map
         ar << self.detail_texture
@@ -195,7 +229,7 @@ class UTexture(UBitmap):
     def default_lod(self) -> int:
         return 1
 
-    def get(self, time: FTime) -> 'UTexture':
+    def get(self, time: FTime) -> "UTexture":
         self.update(time)
         return self.anim_cur if self.anim_cur else self
 
@@ -279,7 +313,7 @@ class UFont(UObject):
         self.char_remap: dict = {}
         self.is_remapped: bool = False
 
-    def serialize(self, ar: FArchive) -> 'UFont':
+    def serialize(self, ar: FArchive) -> "UFont":
         super().serialize(ar)
         ar << self.characters_per_page
         ar << self.pages
@@ -290,22 +324,22 @@ class UFont(UObject):
     def remap_char(self, ch: str) -> str:
         if not self.is_remapped:
             return ch
-        return self.char_remap.get(ch, ' ')
+        return self.char_remap.get(ch, " ")
 
 
 __all__ = [
-    'FColor',
-    'UPalette',
-    'FMipmapBase',
-    'FMipmap',
-    'ETextureFormat',
-    'ELODSet',
-    'UBitmap',
-    'UTexture',
-    'FTextureInfo',
-    'FFontCharacter',
-    'FFontPage',
-    'UFont',
-    'NUM_PAL_COLORS',
-    'MAX_MIPS',
+    "FColor",
+    "UPalette",
+    "FMipmapBase",
+    "FMipmap",
+    "ETextureFormat",
+    "ELODSet",
+    "UBitmap",
+    "UTexture",
+    "FTextureInfo",
+    "FFontCharacter",
+    "FFontPage",
+    "UFont",
+    "NUM_PAL_COLORS",
+    "MAX_MIPS",
 ]

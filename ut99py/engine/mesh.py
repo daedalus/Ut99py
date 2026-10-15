@@ -1,3 +1,15 @@
+"""Port of Engine/Inc/UnMesh.h mesh structs and UMesh/ULodMesh.
+
+Structs ported 1-to-1 from UnMesh.h:15-195 (FMeshVert, FMeshUV,
+FMeshFloatUV, FMeshTri, FMeshWedge, FMeshExtWedge, FMeshFace,
+FMeshMaterial, FMeshVertConnect). FMeshAnimSeq moved to
+Engine/Inc/UnAnim.h:33 (its operator<< is inline there). UMesh
+(UnMesh.h:197) and ULodMesh (UnMesh.h:298) carry the C++ field set, but
+their serialize methods are pending: the C++ classes derive from
+UPrimitive (UnPrim.h) and the TLazyArray/element serializers need
+element factories passed to serialize_tarray (see TODO.md).
+"""
+
 from typing import List, Optional
 from ut99py.core import FName, UObject, FArchive, UStruct, UProperty, FVector, FRotator
 from ut99py.core.types import FBox, FSphere
@@ -17,7 +29,7 @@ class FMeshVert:
         return FVector(self.x, self.y, self.z)
 
     @staticmethod
-    def from_vector(v: FVector) -> 'FMeshVert':
+    def from_vector(v: FVector) -> "FMeshVert":
         return FMeshVert(int(v.x), int(v.y), int(v.z))
 
 
@@ -91,7 +103,7 @@ class UMesh(UObject):
         self.bounding_boxes: List[FBox] = []
         self.bounding_spheres: List[FSphere] = []
         self.vert_links: List[int] = []
-        self.textures: List[Optional['UTexture']] = []
+        self.textures: List[Optional["UTexture"]] = []
         self.texture_lod: List[float] = []
         self.frame_verts: int = 0
         self.anim_frames: int = 0
@@ -103,7 +115,7 @@ class UMesh(UObject):
         self.cur_poly: int = -1
         self.cur_vertex: int = -1
 
-    def serialize(self, ar: FArchive) -> 'UMesh':
+    def serialize(self, ar: FArchive) -> "UMesh":
         super().serialize(ar)
         ar << self.verts
         ar << self.tris
@@ -156,7 +168,7 @@ class ULodMesh(UMesh):
         self.remap_animation_verts: List[int] = []
         self.old_frame_verts: int = 0
 
-    def serialize(self, ar: FArchive) -> 'ULodMesh':
+    def serialize(self, ar: FArchive) -> "ULodMesh":
         super().serialize(ar)
         ar << self.collapse_point_thus
         ar << self.face_level
@@ -179,16 +191,16 @@ class ULodMesh(UMesh):
 
 
 __all__ = [
-    'FMeshVert',
-    'FMeshUV',
-    'FMeshFloatUV',
-    'FMeshTri',
-    'FMeshWedge',
-    'FMeshExtWedge',
-    'FMeshFace',
-    'FMeshMaterial',
-    'FMeshVertConnect',
-    'FMeshAnimSeq',
-    'UMesh',
-    'ULodMesh',
+    "FMeshVert",
+    "FMeshUV",
+    "FMeshFloatUV",
+    "FMeshTri",
+    "FMeshWedge",
+    "FMeshExtWedge",
+    "FMeshFace",
+    "FMeshMaterial",
+    "FMeshVertConnect",
+    "FMeshAnimSeq",
+    "UMesh",
+    "ULodMesh",
 ]
