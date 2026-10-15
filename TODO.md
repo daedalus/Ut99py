@@ -81,7 +81,9 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 *   **Ported Core Headers**: 16/20 (FCodec.h, FRiffChunk.h, UnArc.h, UnBits.h, UnClass.h, UnCoreNet.h, UnFile.h, UnNames.h, UnObjBas.h, UnObjVer.h, UnScript.h, UnStack.h, UnType.h, FConfigCacheIni.h, FFeedbackContextAnsi.h, FMallocAnsi.h).
 *   **Partially Ported Engine**: 3/40+ (UnMesh.h, UnTex.h, UPackage/UnPackage.h).
 *   **Detached/Legacy**: `engine/assets.py` (Redundant decoder, needs reconciliation).
-*   **Missing Metadata**: `engine/mesh.py` and `engine/texture.py` missing source citations.
+*   **Missing Metadata**: Fixed — `engine/mesh.py`, `engine/texture.py` and
+    `core/types.py` now cite their source headers (UnMesh.h/UnAnim.h,
+    UnTex.h, UnMath.h/UnArc.h), so `tools/port_survey.py` tracks them.
 
 ## Next
 - [x] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (UnLinker.h:249-272)
@@ -209,7 +211,8 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       and the concrete `Identical`/`SerializeItem`/`ExportTextItem`/`ImportText`
       bodies are in `Core.lib` and need the Python value model (see object-model
       gaps above); `UClassProperty.GetID` (UnType.h:286) needs `UClassProperty`.
-- [ ] **Metadata Compliance**: Add "Ported from" docstrings to `engine/mesh.py` and `engine/texture.py`.
+- [x] **Metadata Compliance**: Add "Ported from" docstrings to `engine/mesh.py` and `engine/texture.py`.
+      Also cite UnMath.h/UnArc.h in `core/types.py` so the survey tool sees them.
 - [ ] **Reconciliation**: Merge `engine/assets.py` logic into `core/linkers.py` and delete the redundant loader.
 
 ## Engine Subsystems Pending

@@ -53,6 +53,15 @@ ports in the module docstring.
 
 ## Workflows
 
+### Find the next port job
+
+MANDATORY before picking a new header/module to translate: run
+`python3 tools/port_survey.py`. It AST-scans `ut99py/` for cited source
+headers and diffs that against the C++ tree, listing pending Core headers
+first (then Engine), ranked by symbol count. Do not pick a port target from
+memory or guesswork — take it from the tool's "NEXT JOB" line. Every new
+module's docstring must cite its source header so the tool tracks it.
+
 ### Finish a task
 
 1. Create a TODO tracking the work.
