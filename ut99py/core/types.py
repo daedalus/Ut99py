@@ -195,6 +195,10 @@ class FName:
             FName._names[FName._next_index] = name
             FName._next_index += 1
     
+    def get_index(self) -> int:
+        """FName::GetIndex (UnName.h:73) - index into the global name table."""
+        return FName._name_to_index[self.name]
+    
     def __str__(self) -> str:
         if self.number:
             return f"{self.name}_{self.number}"

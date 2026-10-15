@@ -44,7 +44,7 @@ class FObjectImport:
         self.package_index: int = 0
         self.object_name: FName = FName()
         self.x_object: Optional[UObject] = None
-        self.source_linker: Optional['ULinkerLoad'] = None
+        self.source_linker: Optional["ULinkerLoad"] = None
         self.source_index: int = -1
 
     def serialize(self, ar: FArchive) -> None:
@@ -84,10 +84,10 @@ class FPackageFileSummary:
         self.generations: List[FGenerationInfo] = []
 
     def get_file_version(self) -> int:
-        return self.file_version & 0xffff
+        return self.file_version & 0xFFFF
 
     def get_file_version_licensee(self) -> int:
-        return (self.file_version >> 16) & 0xffff
+        return (self.file_version >> 16) & 0xFFFF
 
     def serialize(self, ar: FArchive) -> None:
         """operator<<(FArchive&, FPackageFileSummary&) (UnLinker.h:138)."""
@@ -174,7 +174,7 @@ class ULinkerLoad(ULinker, FArchive):
         self.load_flags: int = load_flags
         self.verified: bool = False
         self.export_hash: List[int] = [0] * 256
-        self.lazy_loaders: List['FLazyLoader'] = []
+        self.lazy_loaders: List["FLazyLoader"] = []
         self.loader: Optional[FArchive] = None
         self.filename = filename
 
@@ -214,7 +214,9 @@ class ULinkerLoad(ULinker, FArchive):
 
         self.seek(self.summary.name_offset)
         sized = self.summary.get_file_version() >= VER_SIZED_NAME_TABLE
-        read_name = self._read_ansi_string if sized else self._read_null_terminated_string
+        read_name = (
+            self._read_ansi_string if sized else self._read_null_terminated_string
+        )
         self.name_map = []
         for _ in range(self.summary.name_count):
             name = read_name()
@@ -246,23 +248,23 @@ class ULinkerLoad(ULinker, FArchive):
     def verify(self) -> None:
         if self.verified:
             return
-        
+
         for i in range(len(self.import_map)):
             self.verify_import(i)
-        
+
         self.verified = True
 
     def verify_import(self, i: int) -> None:
         if not (0 <= i < len(self.import_map)):
             return
-        
+
         imp = self.import_map[i]
         if imp.source_index >= 0:
             return
-        
+
         pkg_name = imp.class_package
         obj_name = imp.object_name
-        
+
         print(f"Resolving import: {pkg_name}.{obj_name}")
 
     def load_all_objects(self) -> None:
@@ -270,14 +272,25 @@ class ULinkerLoad(ULinker, FArchive):
             if exp.obj is None and exp.serial_size > 0:
                 self.create(exp.package_index, None, exp.object_name, 0, False)
 
-    def find_export_index(self, class_name: FName, class_package: FName, object_name: FName, package_index: int) -> int:
+    def find_export_index(
+        self,
+        class_name: FName,
+        class_package: FName,
+        object_name: FName,
+        package_index: int,
+    ) -> int:
         for i, exp in enumerate(self.export_map):
-            if (exp.object_name == object_name and 
-                exp.package_index == package_index):
+            if exp.object_name == object_name and exp.package_index == package_index:
                 return i
         return -1
 
-    def create(self, object_class: Optional[type], object_name: FName, load_flags: int, checked: bool) -> Optional[UObject]:
+    def create(
+        self,
+        object_class: Optional[type],
+        object_name: FName,
+        load_flags: int,
+        checked: bool,
+    ) -> Optional[UObject]:
         return None
 
     def preload(self, obj: UObject) -> None:
@@ -300,7 +313,7 @@ class ULinkerLoad(ULinker, FArchive):
     def read(self, length: int) -> bytes:
         if self.loader:
             return self.loader.read(length)
-        return b''
+        return b""
 
     def serialize(self, data: bytes, length: int) -> int:
         if self.loader:
@@ -318,6 +331,69 @@ class ULinkerLoad(ULinker, FArchive):
         name.name = source.name
         name.number = source.number
         return name
+
+    # ---- ULinkerLoad::IndexToObject / CreateExport / CreateImport ----
+    # Inline from UnLinker.h:246-272.  IndexToObject resolves an AR_INDEX into
+    # a UObject pointer via the export/import tables.  CreateExport/CreateImport
+    # are stubs returning placeholder objects (construction in Core.lib).
+    def index_to_object(self, index: int) -> Optional[UObject]:
+        """IndexToObject( INT Index ) (UnLinker.h:249)."""
+        if index == 0:
+            return None
+        if index > 0:
+            # Export: positive index into this linker's export table.
+            if 0 <= index < len(self.export_map):
+                exp = self.export_map[index]
+                if exp.obj is not None:
+                    return exp.obj
+                return self.create_export(index)
+            return None
+        # Import: negative index is (index+1) into the import table.
+        import_index = -index - 1
+        if 0 <= import_index < len(self.import_map):
+            return self.create_import(import_index)
+        return None
+
+    def create_export(self, index: int) -> Optional[UObject]:
+        """CreateExport( INT Index ) (UnLinker.h:246)."""
+        if not (0 <= index < len(self.export_map)):
+            return None
+        exp = self.export_map[index]
+        if exp.obj is not None:
+            return exp.obj
+        # C++ CreateExport constructs the object; here we return the export entry
+        # as a placeholder so the pipeline does not deadlock.
+        exp.obj = exp
+        return exp.obj
+
+    def create_import(self, index: int) -> Optional[UObject]:
+        """CreateImport( INT Index ) (UnLinker.h:247)."""
+        if not (0 <= index < len(self.import_map)):
+            return None
+        imp = self.import_map[index]
+        if imp.x_object is not None:
+            return imp.x_object
+        # C++ CreateImport resolves via parent linker; here we return placeholder.
+        imp.x_object = imp
+        return imp.x_object
+
+    # Inline operator<<(FArchive&, UObject*&) from UnLinker.h:262-272.
+    def serialize_object(self, obj: Optional[UObject]) -> Optional[UObject]:
+        """Ar << UObject*& (UnLinker.h:262-272)."""
+        index = AR_INDEX(self.loader, 0)
+        temporary = self.index_to_object(index)
+        return temporary
+
+    # ULinkerLoad: Override _serialize to handle UObject*& per UnLinker.h:262-272.
+    # Instead of calling u->serialize(Ar), it reads AR_INDEX, resolves via
+    # index_to_object into a UObject pointer, and returns that pointer. Callers
+    # assign it back (Python reference semantics via return value).
+    def _serialize(self, value: Any) -> Any:
+        """Dispatch Ar << X on the operand type, specialised for UObject."""
+        self._check_direction()
+        if isinstance(value, UObject):
+            return self.serialize_object(value)
+        return super()._serialize(value)
 
 
 class ULinkerSave(ULinker, FArchive):
@@ -359,16 +435,18 @@ class FLazyLoader:
     def load(self) -> bytes:
         if self.data:
             return self.data
-        
+
         exp = self.linker.export_map[self.index]
         if exp.serial_size > 0 and self.linker.loader:
             self.linker.seek(exp.serial_offset)
             self.data = self.linker.loader.read(exp.serial_size)
-        
-        return self.data or b''
+
+        return self.data or b""
 
 
-def load_package(filename: str, parent: Optional[UObject] = None, load_flags: int = 0) -> Optional[ULinkerLoad]:
+def load_package(
+    filename: str, parent: Optional[UObject] = None, load_flags: int = 0
+) -> Optional[ULinkerLoad]:
     try:
         linker = ULinkerLoad(parent, filename, load_flags)
         if linker.success:
@@ -379,13 +457,13 @@ def load_package(filename: str, parent: Optional[UObject] = None, load_flags: in
 
 
 __all__ = [
-    'FObjectExport',
-    'FObjectImport',
-    'FGenerationInfo',
-    'FPackageFileSummary',
-    'ULinker',
-    'ULinkerLoad',
-    'ULinkerSave',
-    'FLazyLoader',
-    'load_package',
+    "FObjectExport",
+    "FObjectImport",
+    "FGenerationInfo",
+    "FPackageFileSummary",
+    "ULinker",
+    "ULinkerLoad",
+    "ULinkerSave",
+    "FLazyLoader",
+    "load_package",
 ]

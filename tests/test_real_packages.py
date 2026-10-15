@@ -20,7 +20,14 @@ from pathlib import Path
 
 import pytest
 
+from ut99py.core import objects
 from ut99py.core.linkers import ULinkerLoad
+from ut99py.core.objects import (
+    PKG_AllowDownload,
+    RF_LoadForClient,
+    RF_Public,
+    RF_Transactional,
+)
 from ut99py.core.objver import (
     PACKAGE_FILE_TAG,
     VER_GUID_AND_GENERATIONS,
@@ -266,3 +273,47 @@ def test_every_package_loads():
         assert len(linker.name_map) == summary.name_count, path
         assert len(linker.import_map) == summary.import_count, path
         assert len(linker.export_map) == summary.export_count, path
+
+
+def _defined_bits(prefix: str) -> int:
+    """OR of every named constant with this prefix (UnObjBas.h enums).
+
+    A bit is "defined" iff some EObjectFlags/EPackageFlags member carries it,
+    aliases included; combo constants like RF_Load are subsets and harmless.
+    """
+    total = 0
+    for name, value in vars(objects).items():
+        if name.startswith(prefix) and isinstance(value, int):
+            total |= value
+    return total
+
+
+def test_export_object_flags_use_only_defined_bits():
+    """Every FObjectExport.ObjectFlags value is a UT99 EObjectFlags bit.
+
+    The port once carried the UT2003 layout (RF_Public=0x1); real packages use
+    0x4, so this catches a regression straight off disk.
+    """
+    mask = _defined_bits("RF_")
+    seen = 0
+    for path in PACKAGE_PATHS:
+        for export in load(path).export_map:
+            undefined = export.object_flags & ~mask
+            assert undefined == 0, (path, export.object_name.name, hex(undefined))
+            seen |= export.object_flags
+    # The install exercises the common load flags, not just one bit.
+    assert seen & RF_Public
+    assert seen & RF_Transactional
+    assert seen & RF_LoadForClient
+
+
+def test_package_flags_use_only_defined_bits():
+    """FPackageFileSummary.PackageFlags holds only UT99 EPackageFlags bits."""
+    mask = _defined_bits("PKG_")
+    seen = 0
+    for path in PACKAGE_PATHS:
+        flags = load(path).summary.package_flags
+        undefined = flags & ~mask
+        assert undefined == 0, (path, hex(undefined))
+        seen |= flags
+    assert seen & PKG_AllowDownload

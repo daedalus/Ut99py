@@ -189,11 +189,18 @@ class FArchive:
         self.write(struct.pack('<f', value))
         return value
 
-    def serialize_double(self, value: float) -> float:
-        """QWORD / SQWORD (UnArc.h:182-191): eight bytes."""
+    def serialize_qword(self, value: int) -> int:
+        """QWORD (UnArc.h:182-186): eight bytes, unsigned."""
         if self._loading:
-            return self._read_double()
-        self.write(struct.pack('<d', value))
+            return self._read_uint64()
+        self.write(struct.pack('<Q', value & 0xFFFFFFFFFFFFFFFF))
+        return value
+
+    def serialize_sqword(self, value: int) -> int:
+        """SQWORD (UnArc.h:187-191): eight bytes, signed."""
+        if self._loading:
+            return self._read_int64()
+        self.write(struct.pack('<q', value))
         return value
 
     def serialize_guid(self, guid: FGuid) -> FGuid:
@@ -339,9 +346,13 @@ class FArchive:
         data = self.read(4)
         return struct.unpack('<f', data)[0] if len(data) == 4 else 0.0
     
-    def _read_double(self) -> float:
+    def _read_int64(self) -> int:
         data = self.read(8)
-        return struct.unpack('<d', data)[0] if len(data) == 8 else 0.0
+        return struct.unpack('<q', data)[0] if len(data) == 8 else 0
+    
+    def _read_uint64(self) -> int:
+        data = self.read(8)
+        return struct.unpack('<Q', data)[0] if len(data) == 8 else 0
     
     def _read_string(self) -> str:
         length = self._read_int32()

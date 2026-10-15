@@ -11,7 +11,7 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       index→string table + probe range).
 - [x] `Core/Inc/UnArc.h` → `FArchive` in `core/system.py`: status flags and
       accessors, `__lshift__`/`__rshift__` dispatch, the primitive friend
-      operators (BYTE/WORD/DWORD/INT/FLOAT/QWORD-as-double), `FGuid`,
+      operators (BYTE/WORD/DWORD/INT/FLOAT/QWORD/SQWORD), `FGuid`,
       `FCompactIndex`, `serialize_bits`, and the virtual `serialize_name` /
       `serialize_object` hooks. Direction (`_loading`/`_saving`) is set by
       `FArchiveFileReader`/`FArchiveMemoryReader`/`FArchiveFileWriter` as in
@@ -48,20 +48,63 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - [x] Runaway heritage loop bounded: `UnLinker.h:158` reads `HeritageCount`
       GUIDs from `HeritageOffset` whatever the file claims, so a bogus count
       spins. The port skips the list when it does not fit in the archive.
+- [x] `Core/Inc/UnObjBas.h` enums → `core/objects.py`: `ELoadFlags`,
+      `EPackageFlags`, `EClassFlags`, `EPropertyFlags`, `EObjectFlags`,
+      `EGotoState`, plus `EPropertyPortFlags` (`UnType.h:11`) and
+      `PROPERTY_ALIGNMENT` (`UnClass.h:14`). These replaced UE2-style constants
+      left by the initial commit; the ousted `RF_Public=0x1` was not the UT99
+      value (0x4). `core/__init__.py` re-exports the set and lists it in
+      `__all__`.
+- [x] `Core/Inc/UnObjBas.h`/`UnType.h`/`UnClass.h` inline logic →
+      `core/objects.py`: `UObject.get_object_hash`/`is_in`,
+      `UField.SuperField`/`HashNext`/`HASH_COUNT`,
+      `UStruct.get_super_struct`/`get_inheritance_super`/`is_child_of`/
+      `field_iterator` (`TFieldIterator`), `UClass.get_super_class`/
+      `add_dependency` (+`FDependency`), `UEnum.get_super_enum`,
+      `UConst.get_super_const`, `UFunction.get_inheritance_super`(NULL)/
+      `get_super_function`, `UState.get_super_state`,
+      `UProperty.get_size` (`ArrayDim*ElementSize`) / `should_serialize_value`.
+      `FName.get_index` (`UnName.h:73`) added for the object hash.
+- [x] `FArchive.serialize_qword`/`serialize_sqword` (`UnArc.h:182-191`). The old
+      `serialize_double` claimed to be this operator but packed an IEEE-754
+      `double`; `QWORD`/`SQWORD` are 64-bit ints (`UnGnuG.h:127,136`).
 
 ## Next
-- [ ] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (needs
-      `CreateExport`/`CreateImport`, i.e. the `UClass` construction path) and
-      `ULinkerSave::operator<<(FName&/UObject*&)` (needs a live `Saver`).
+- [x] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (UnLinker.h:249-272)
+      → `core/linkers.py`: the archive's `_serialize` now reads the compact
+      index and resolves it through the export/import tables. `CreateExport`/
+      `CreateImport` are structural stubs returning the table entry as the
+      placeholder object, because the C++ construction bodies are in Core.lib.
+- [ ] `ULinkerSave::operator<<(FName&/UObject*&)` (needs a live `Saver`).
 - [ ] `engine/mesh.py`: `UMesh`/`ULodMesh` still hold plain `List[...]` and
       their `FMesh*` structs have no serializers, so `ar << self.verts` dies in
       `_serialize`. Needs the real `UMesh::Serialize` (Engine/Src is absent from
       the source drop) plus element types passed to `serialize_tarray`.
-- [ ] `Core/Inc/UnObjBas.h` QWORD/SQWORD operators (currently only `double`).
-- [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader`.
-- [ ] `Core/Inc/UnObj.h` gaps in `ut99py/core/objects.py`.
+- [x] `Core/Inc/UnFile.h` inline utilities → `core/file_utils.py`: `GCRCTABLE`
+      (256-entry IEEE-802.3 CRC-32 table reconstructed from polynomial),
+      `appToUpper`/`appToLower`/`appIsAlpha`/`appIsDigit`/`appIsAlnum`
+      (line 260-276), `appStrihash` (line 331-345). CORE_API declared
+      functions documented as unimplemented (bodies in Core.lib). Validated:
+      `len(GCRCTABLE) == 256`; `appStrihash('Hello')` produces consistent hash.
+- [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader` (appFindPackageFile,
+      file-path utilities; full CORE_API bodies remain in Core.lib).
+- [ ] `ut99py/core/objects.py` object-model gaps (there is no `UnObj.h`; the
+      model is `UnObjBas.h` + `UnType.h` + `UnClass.h`):
+      `UProperty::Matches`/`Identical` and `UStruct::StructCompare` operate on
+      raw pointers and per-type `Identical` bodies that live in `Core.lib`, so
+      they need a Python value model before they can be ported faithfully.
+      `UClass::GetDefaultObject` still fabricates an empty object rather than
+      reading `Defaults(0)`; `UObject::IsA` uses `isinstance` instead of the C++
+      `UClass` walk; `UStruct::Link`/`UClass::Bind`/`StaticAllocateObject` are the
+      `Core.lib` construction path.
+- [x] `Core/Inc/UnCoreNet.h` inline members → `core/net.py`: `FFieldNetCache`
+      (UnCoreNet.h:12), `FClassNetCache` inline `GetMaxIndex` (UnCoreNet.h:35) /
+      `GetRepConditionCount` (:39) / `GetFromField` (:43) / `GetFromIndex` (:53),
+      `FPackageInfo` (:76), the no-op `operator<<(FArchive&,FClassNetCache*)`
+      (:132), and `FPropertyRetirement` (:140). The CORE_API ctors and
+      `operator<<` bodies remain in Core.lib (documented); the `UPackageMap`
+      stub stays in `core/objects.py`. Pinned by `tests/test_net.py`.
 - [ ] `Core/Inc/UnClass.h`, `UnScript.h` → property/script metaclasses.
-- [ ] `Core/Inc/UnCoreNet.h` → `ut99py/core/net.py` (FArchive net serialization).
 
 ## Known deviations to reconcile
 - Python `NAME_*` in `core/types.py` are `FName` objects, not the C++ `EName`
@@ -73,8 +116,9 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - `FArchive.serialize` primitives are chosen by the operand's runtime type, so
   a bare Python `int` serialises as `INT` (4 bytes). Other widths need the
   explicit `serialize_byte`/`serialize_word`/`serialize_dword` methods, since
-  Python has no static type to overload on. QWORD/SQWORD reuse
-  `serialize_double`.
+  Python has no static type to overload on. `serialize_qword`/`serialize_sqword`
+  cover `QWORD`/`SQWORD` (`UnArc.h:182-191`); the port previously mislabelled an
+  IEEE-754 `<d` packer as the QWORD/SQWORD operator.
 - `FCompactIndex`/`ut_reader._read_compact_index` are two implementations of
   the same format; `FCompactIndex.decode` is the verified one.
 - `FArchive.serialize_str` reconstructs `operator<<(FArchive&, FString&)`
@@ -108,3 +152,10 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - `ULinker.get_import_full_name`/`get_export_full_name` are approximations: the
   C++ bodies (`UnLinker.h:207-208`) are in the prebuilt `Core.lib`, and
   `get_export_full_name` here ignores `PackageIndex` entirely.
+- `core/objects.py` `RF_NoFlags`/`CPF_NoFlags` are Python-side zero aliases (the
+  header spells "no flags" as `0` and does not name it). `FDependency.class_`
+  carries the C++ `Class` member, a Python keyword.
+- `UProperty._element_size` is a class attribute set on each concrete property
+  type where the C++ `UProperty::Link` (in `Core.lib`) assigns `ElementSize`; the
+  base class leaves it 0 because that body is unavailable. `UStrProperty`'s 16 is
+  likewise the existing reconstruction.

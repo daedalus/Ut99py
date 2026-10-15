@@ -86,6 +86,30 @@ def test_compact_index_roundtrip_through_archive(tmp_path):
     r.close()
 
 
+def test_qword_and_sqword_roundtrip(tmp_path):
+    # QWORD/SQWORD are 8-byte ints (UnArc.h:182-191, UnGnuG.h:127,136), not
+    # doubles: SQWORD must survive a negative value, which a <d packer cannot.
+    path = str(tmp_path / "qwords.bin")
+    values = [0, 1, 0x0102030405060708, 0xFFFFFFFFFFFFFFFF]
+    signed = [0, -1, -0x0102030405060708, 0x7FFFFFFFFFFFFFFF]
+    w = FArchiveFileWriter(path)
+    for value in values:
+        w.serialize_qword(value)
+    for value in signed:
+        w.serialize_sqword(value)
+    w.close()
+
+    with open(path, "rb") as f:
+        raw = f.read()
+    # values are 0, 1, 0x0102030405060708, 0xffffffffffffffff.
+    assert raw[16:24] == bytes([0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01])
+
+    r = FArchiveFileReader(path)
+    assert [r.serialize_qword(0) for _ in values] == values
+    assert [r.serialize_sqword(0) for _ in signed] == signed
+    r.close()
+
+
 def test_unsupported_operand_raises():
     ar = FArchive()
     ar._loading = True

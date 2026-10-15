@@ -1,8 +1,14 @@
-"""Core objects: UObject, UClass, UStruct, UProperty"""
+"""Core objects: UObject, UClass, UStruct, UProperty
 
-from typing import TYPE_CHECKING, Type, Optional, Any, ClassVar
+Enums and inline object-model logic are ported from Core/Inc/UnObjBas.h,
+Core/Inc/UnType.h and Core/Inc/UnClass.h. The class construction path
+(StaticAllocateObject, UClass::Bind, property Link) lives in the prebuilt
+Core.lib and is reconstructed or left stubbed; each case says so.
+"""
+
+from typing import TYPE_CHECKING, Type, Optional, Any, ClassVar, Iterator
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import sys
 
 from .types import FName, FString, TArray, INDEX_NONE
@@ -17,11 +23,171 @@ from .types import (
 
 if TYPE_CHECKING:
     from .package import UPackage
+    from .system import FArchive
+
+
+# ---------------------------------------------------------------------------
+# Core enums (Core/Inc/UnObjBas.h). These carry the bits that reach the file:
+# FPackageFileSummary.PackageFlags and FObjectExport.ObjectFlags.
+# ---------------------------------------------------------------------------
+
+# ELoadFlags (UnObjBas.h:16).
+LOAD_None = 0x0000
+LOAD_NoFail = 0x0001
+LOAD_NoWarn = 0x0002
+LOAD_Throw = 0x0008
+LOAD_Verify = 0x0010
+LOAD_AllowDll = 0x0020
+LOAD_DisallowFiles = 0x0040
+LOAD_NoVerify = 0x0080
+LOAD_Forgiving = 0x1000
+LOAD_Quiet = 0x2000
+LOAD_NoRemap = 0x4000
+LOAD_Propagate = 0
+
+# EPackageFlags (UnObjBas.h:35).
+PKG_AllowDownload = 0x0001
+PKG_ClientOptional = 0x0002
+PKG_ServerSideOnly = 0x0004
+PKG_BrokenLinks = 0x0008
+PKG_Unsecure = 0x0010
+PKG_Need = 0x8000
+
+# EClassFlags (UnObjBas.h:67).
+CLASS_Abstract = 0x00001
+CLASS_Compiled = 0x00002
+CLASS_Config = 0x00004
+CLASS_Transient = 0x00008
+CLASS_Parsed = 0x00010
+CLASS_Localized = 0x00020
+CLASS_SafeReplace = 0x00040
+CLASS_RuntimeStatic = 0x00080
+CLASS_NoExport = 0x00100
+CLASS_NoUserCreate = 0x00200
+CLASS_PerObjectConfig = 0x00400
+CLASS_NativeReplication = 0x00800
+CLASS_Inherit = (
+    CLASS_Transient
+    | CLASS_Config
+    | CLASS_Localized
+    | CLASS_SafeReplace
+    | CLASS_RuntimeStatic
+    | CLASS_PerObjectConfig
+)
+CLASS_RecompilerClear = (
+    CLASS_Inherit | CLASS_Abstract | CLASS_NoExport | CLASS_NativeReplication
+)
+
+# EPropertyFlags (UnObjBas.h:92).
+CPF_Edit = 0x00000001
+CPF_Const = 0x00000002
+CPF_Input = 0x00000004
+CPF_ExportObject = 0x00000008
+CPF_OptionalParm = 0x00000010
+CPF_Net = 0x00000020
+CPF_ConstRef = 0x00000040
+CPF_Parm = 0x00000080
+CPF_OutParm = 0x00000100
+CPF_SkipParm = 0x00000200
+CPF_ReturnParm = 0x00000400
+CPF_CoerceParm = 0x00000800
+CPF_Native = 0x00001000
+CPF_Transient = 0x00002000
+CPF_Config = 0x00004000
+CPF_Localized = 0x00008000
+CPF_Travel = 0x00010000
+CPF_EditConst = 0x00020000
+CPF_GlobalConfig = 0x00040000
+CPF_OnDemand = 0x00100000
+CPF_New = 0x00200000
+CPF_NeedCtorLink = 0x00400000
+CPF_ParmFlags = (
+    CPF_OptionalParm
+    | CPF_Parm
+    | CPF_OutParm
+    | CPF_SkipParm
+    | CPF_ReturnParm
+    | CPF_CoerceParm
+)
+CPF_PropagateFromStruct = CPF_Const | CPF_Native | CPF_Transient
+
+# EObjectFlags (UnObjBas.h:126). Several bits carry two names by design.
+RF_Transactional = 0x00000001
+RF_Unreachable = 0x00000002
+RF_Public = 0x00000004
+RF_TagImp = 0x00000008
+RF_TagExp = 0x00000010
+RF_SourceModified = 0x00000020
+RF_TagGarbage = 0x00000040
+RF_NeedLoad = 0x00000200
+RF_HighlightedName = 0x00000400
+RF_EliminateObject = 0x00000400
+RF_InSingularFunc = 0x00000800
+RF_RemappedName = 0x00000800
+RF_Suppress = 0x00001000
+RF_StateChanged = 0x00001000
+RF_InEndState = 0x00002000
+RF_Transient = 0x00004000
+RF_Preloading = 0x00008000
+RF_LoadForClient = 0x00010000
+RF_LoadForServer = 0x00020000
+RF_LoadForEdit = 0x00040000
+RF_Standalone = 0x00080000
+RF_NotForClient = 0x00100000
+RF_NotForServer = 0x00200000
+RF_NotForEdit = 0x00400000
+RF_Destroyed = 0x00800000
+RF_NeedPostLoad = 0x01000000
+RF_HasStack = 0x02000000
+RF_Native = 0x04000000
+RF_Marked = 0x08000000
+RF_ErrorShutdown = 0x10000000
+RF_DebugPostLoad = 0x20000000
+RF_DebugSerialize = 0x40000000
+RF_DebugDestroy = 0x80000000
+RF_ContextFlags = RF_NotForClient | RF_NotForServer | RF_NotForEdit
+RF_LoadContextFlags = RF_LoadForClient | RF_LoadForServer | RF_LoadForEdit
+RF_Load = (
+    RF_ContextFlags
+    | RF_LoadContextFlags
+    | RF_Public
+    | RF_Standalone
+    | RF_Native
+    | RF_SourceModified
+    | RF_Transactional
+    | RF_HasStack
+)
+RF_Keep = RF_Native | RF_Marked
+RF_ScriptMask = (
+    RF_Transactional
+    | RF_Public
+    | RF_Transient
+    | RF_NotForClient
+    | RF_NotForServer
+    | RF_NotForEdit
+)
+
+# EGotoState (UnObjBas.h:57).
+GOTOSTATE_NotFound = 0
+GOTOSTATE_Success = 1
+GOTOSTATE_Preempted = 2
+
+# EPropertyPortFlags (UnType.h:11).
+PPF_Localized = 1
+PPF_Delimited = 2
+
+# Zero aliases used as default arguments in this package; the header spells
+# "no flags" as 0 rather than naming it.
+RF_NoFlags = 0
+CPF_NoFlags = 0
 
 
 class UObject(ABC):
     _all_objects: ClassVar[TArray['UObject']] = TArray()
     _gc_lock_count: ClassVar[int] = 0
+    
+    # ARRAY_COUNT(GObjHash) (UnObjBas.h:478).
+    OBJECT_HASH_COUNT: ClassVar[int] = 4096
     
     _app_entry: ClassVar[Optional['UObject']] = None
     
@@ -69,6 +235,23 @@ class UObject(ABC):
     def is_a(self, other_class: Type['UObject']) -> bool:
         return isinstance(self, other_class)
     
+    def is_in(self, some_outer: Optional['UObject']) -> bool:
+        """UObject::IsIn (UnType.h:545): walk the Outer chain. A NULL Outer
+        matches everything, as in the C++."""
+        outer = self._outer
+        while outer is not None:
+            if outer is some_outer:
+                return True
+            outer = outer._outer
+        return some_outer is None
+    
+    @staticmethod
+    def get_object_hash(obj_name: FName, outer_index: int) -> int:
+        """UObject::GetObjectHash (UnObjBas.h:586)."""
+        return (obj_name.get_index() ^ outer_index) & (
+            UObject.OBJECT_HASH_COUNT - 1
+        )
+    
     def destroy(self) -> bool:
         raise NotImplementedError
     
@@ -102,10 +285,33 @@ class USystem(USubsystem):
         pass
 
 
+@dataclass
+class FDependency:
+    """FDependency (UnClass.h:39): one incremental-compilation dependency.
+    `class_` carries the C++ `Class` member (a Python keyword)."""
+
+    class_: Optional['UClass'] = None
+    deep: bool = False
+    script_text_crc: int = 0
+
+
 class UField(UObject):
+    # enum {HASH_COUNT = 256} (UnClass.h:103).
+    HASH_COUNT: ClassVar[int] = 256
+    
     def __init__(self):
         super().__init__()
+        self._super_field: Optional['UField'] = None
         self._next: Optional['UField'] = None
+        self._hash_next: Optional['UField'] = None
+    
+    @property
+    def super_field(self) -> Optional['UField']:
+        return self._super_field
+    
+    @super_field.setter
+    def super_field(self, value: Optional['UField']) -> None:
+        self._super_field = value
     
     @property
     def next(self) -> Optional['UField']:
@@ -115,11 +321,29 @@ class UField(UObject):
     def next(self, value: Optional['UField']) -> None:
         self._next = value
 
+    @property
+    def hash_next(self) -> Optional['UField']:
+        return self._hash_next
+
+    @hash_next.setter
+    def hash_next(self, value: Optional['UField']) -> None:
+        self._hash_next = value
+
 
 class UEnum(UField):
     def __init__(self):
         super().__init__()
         self._names = TArray()
+    
+    def get_super_enum(self) -> Optional['UEnum']:
+        """UEnum::GetSuperEnum (UnClass.h:397); checkSlow note in
+        UStruct.get_super_struct."""
+        super_field = self._super_field
+        if super_field is not None and not isinstance(super_field, UEnum):
+            raise TypeError(
+                f"{self!r} SuperField is {type(super_field).__name__}, not UEnum"
+            )
+        return super_field
 
 
 class UConst(UField):
@@ -134,6 +358,20 @@ class UConst(UField):
     @value.setter
     def value(self, val: FString) -> None:
         self._value = val
+    
+    def get_super_const(self) -> Optional['UConst']:
+        """UConst::GetSuperConst (UnClass.h:527); checkSlow note in
+        UStruct.get_super_struct."""
+        super_field = self._super_field
+        if super_field is not None and not isinstance(super_field, UConst):
+            raise TypeError(
+                f"{self!r} SuperField is {type(super_field).__name__}, not UConst"
+            )
+        return super_field
+
+
+# Boundary to align class properties on (UnClass.h:14).
+PROPERTY_ALIGNMENT = 4
 
 
 class UStruct(UField):
@@ -154,6 +392,42 @@ class UStruct(UField):
     
     def get_script_size(self) -> int:
         return len(self._script)
+    
+    def get_super_struct(self) -> Optional['UStruct']:
+        """UStruct::GetSuperStruct (UnClass.h:267). The C++ checkSlow that
+        SuperField is a UStruct runs only in debug builds; Python always checks
+        it, since there is no release build to fall back to."""
+        super_field = self._super_field
+        if super_field is not None and not isinstance(super_field, UStruct):
+            raise TypeError(
+                f"{self!r} SuperField is {type(super_field).__name__}, not UStruct"
+            )
+        return super_field
+    
+    def get_inheritance_super(self) -> Optional['UStruct']:
+        """UStruct::GetInheritanceSuper (UnClass.h:234)."""
+        return self.get_super_struct()
+    
+    def is_child_of(self, some_base: Optional['UStruct']) -> bool:
+        """UStruct::IsChildOf (UnClass.h:252)."""
+        struct: Optional[UStruct] = self
+        while struct is not None:
+            if struct is some_base:
+                return True
+            struct = struct.get_super_struct()
+        return False
+    
+    def field_iterator(self, field_class: Type[UField]) -> Iterator[UField]:
+        """TFieldIterator<T> (UnClass.h:135): this struct's Children, then each
+        inheritance super's Children, keeping only instances of field_class."""
+        struct: Optional[UStruct] = self
+        while struct is not None:
+            field = struct._children
+            while field is not None:
+                if isinstance(field, field_class):
+                    yield field
+                field = field._next
+            struct = struct.get_inheritance_super()
     
     def serialize(self, ar: 'FArchive') -> None:
         pass
@@ -177,6 +451,22 @@ class UFunction(UStruct):
     @property
     def native(self) -> bool:
         return self._native
+    
+    def get_inheritance_super(self) -> Optional[UStruct]:
+        """UFunction::GetInheritanceSuper (UnClass.h:317): functions do not
+        inherit properties."""
+        return None
+    
+    def get_super_function(self) -> Optional['UFunction']:
+        """UFunction::GetSuperFunction (UnClass.h:321); checkSlow note in
+        UStruct.get_super_struct."""
+        super_field = self._super_field
+        if super_field is not None and not isinstance(super_field, UFunction):
+            raise TypeError(
+                f"{self!r} SuperField is {type(super_field).__name__}, "
+                "not UFunction"
+            )
+        return super_field
 
 
 class UState(UStruct):
@@ -184,26 +474,21 @@ class UState(UStruct):
         super().__init__()
         self._actor_key: int = 0
         self._label_table: TArray() = TArray()
+    
+    def get_inheritance_super(self) -> Optional[UStruct]:
+        """UState::GetInheritanceSuper (UnClass.h:361)."""
+        return self.get_super_state()
+    
+    def get_super_state(self) -> Optional['UState']:
+        """UState::GetSuperState (UnClass.h:365); checkSlow note in
+        UStruct.get_super_struct."""
+        super_field = self._super_field
+        if super_field is not None and not isinstance(super_field, UState):
+            raise TypeError(
+                f"{self!r} SuperField is {type(super_field).__name__}, not UState"
+            )
+        return super_field
 
-
-RF_NoFlags = 0x00000000
-RF_Public = 0x00000001
-RF_Standalone = 0x00000002
-RF_HasStack = 0x00000004
-RF_Marked = 0x00000008
-RF_InEdit = 0x00000020
-RF_Archetype = 0x00000040
-RF_TextureTransient = 0x00000080
-RF_NONPINKER_SCRIPT = 0x00000100
-RF_ScriptMask = 0x00000100
-RF_DisallowServerSidePhysics = 0x00000400
-
-RF_LoadForClient = 0x00010000
-RF_LoadForServer = 0x00020000
-RF_LoadForEdit = 0x00040000
-
-RF_OuterMask = 0xF8000000
-RF_IsChunkMask = 0x07FFFFFF
 
 class UClass(UStruct):
     _class_map: ClassVar[dict[str, Type['UClass']]] = {}
@@ -212,6 +497,28 @@ class UClass(UStruct):
         super().__init__()
         self._default_object: Optional[UObject] = None
         self._defaults: list[bytes] = []
+        self._dependencies: list['FDependency'] = []
+    
+    def get_inheritance_super(self) -> Optional[UStruct]:
+        """UClass::GetInheritanceSuper (UnClass.h:452)."""
+        return self.get_super_class()
+    
+    def get_super_class(self) -> Optional['UClass']:
+        """UClass::GetSuperClass (UnClass.h:477). Unlike the other GetSuper*
+        accessors, the C++ has no checkSlow here, so the port does not check
+        either; the result is whatever SuperField holds."""
+        return self._super_field
+    
+    def add_dependency(self, in_class: 'UClass', deep: bool) -> None:
+        """UClass::AddDependency (UnClass.h:466). The C++ loop has no break, so
+        every matching record is updated, and only a missing record is added."""
+        found = False
+        for dep in self._dependencies:
+            if dep.class_ is in_class:
+                dep.deep |= deep
+                found = True
+        if not found:
+            self._dependencies.append(FDependency(in_class, deep))
     
     def get_default_object(self) -> UObject:
         if self._default_object is None:
@@ -227,6 +534,10 @@ class UClass(UStruct):
 
 class UProperty(UField):
     _property_type: ClassVar[Optional[FName]] = None
+    
+    # ElementSize is assigned per type by UProperty::Link (Core.lib); the
+    # abstract base declares no size of its own.
+    _element_size: ClassVar[int] = 0
     
     def __init__(self):
         super().__init__()
@@ -244,7 +555,17 @@ class UProperty(UField):
         return self._property_flags
     
     def get_size(self) -> int:
-        return self._array_dim * 4
+        """UProperty::GetSize (UnType.h:71)."""
+        return self._array_dim * self._element_size
+    
+    def should_serialize_value(self, ar: 'FArchive') -> bool:
+        """UProperty::ShouldSerializeValue (UnType.h:77): native properties are
+        never serialized here, and transient ones only in non-persistent
+        archives."""
+        skip = bool(self._property_flags & CPF_Native) or (
+            bool(self._property_flags & CPF_Transient) and ar.is_persistent()
+        )
+        return not skip
     
     def get_min_alignment(self) -> int:
         return 1
@@ -255,59 +576,45 @@ class UProperty(UField):
 
 class UByteProperty(UProperty):
     _property_type = NAME_ByteProperty
-    
-    def get_size(self) -> int:
-        return 1
+    _element_size = 1
 
 
 class UIntProperty(UProperty):
     _property_type = NAME_IntProperty
-    
-    def get_size(self) -> int:
-        return 4
+    _element_size = 4
 
 
 class UBoolProperty(UProperty):
     _property_type = NAME_BoolProperty
+    _element_size = 4
     
     def __init__(self):
         super().__init__()
         self._bit_mask: int = 0
-    
-    def get_size(self) -> int:
-        return 4
 
 
 class UFloatProperty(UProperty):
     _property_type = NAME_FloatProperty
-    
-    def get_size(self) -> int:
-        return 4
+    _element_size = 4
 
 
 class UObjectProperty(UProperty):
     _property_type = NAME_ObjectProperty
+    _element_size = 4
     
     def __init__(self):
         super().__init__()
         self._property_class: Optional[UClass] = None
-    
-    def get_size(self) -> int:
-        return 4
 
 
 class UNameProperty(UProperty):
     _property_type = NAME_NameProperty
-    
-    def get_size(self) -> int:
-        return 4
+    _element_size = 4
 
 
 class UStrProperty(UProperty):
     _property_type = FName("StrProperty")
-    
-    def get_size(self) -> int:
-        return 16
+    _element_size = 16
 
 
 class UStructProperty(UProperty):
@@ -318,35 +625,19 @@ class UStructProperty(UProperty):
         self._struct: Optional[UStruct] = None
     
     def get_size(self) -> int:
-        return self._struct._property_size if self._struct else 0
+        # UStructProperty::Link sets ElementSize = Struct->PropertiesSize.
+        return self._array_dim * (
+            self._struct._property_size if self._struct else 0
+        )
 
 
 class UArrayProperty(UProperty):
     _property_type = NAME_ArrayProperty
+    _element_size = 16
     
     def __init__(self):
         super().__init__()
         self._inner: Optional[UProperty] = None
-    
-    def get_size(self) -> int:
-        return 16
-
-
-CPF_NoFlags = 0x00000000
-CPF_EditConst = 0x00000001
-CPF_Const = 0x00000002
-CPF_Export = 0x00000004
-CPF_EditInline = 0x00000008
-CPF_EditInlineUse = 0x00000010
-CPF_BlueprintReadOnly = 0x00000020
-CPF_Net = 0x00000100
-CPF_EditAnywhere = 0x00000200
-CPF_ArchetypeSStable = 0x00000400
-CPF_Transient = 0x00000800
-CPF_Config = 0x00001000
-CPF_Localized = 0x00008000
-CPF_Travel = 0x00010000
-CPF_RepRetry = 0x00100000
 
 
 class ULinker(UObject):

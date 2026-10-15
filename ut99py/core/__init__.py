@@ -40,10 +40,17 @@ from .objects import (
     FOutputDevice, FFeedbackContext,
     USubsystem, USystem,
     app_error, app_warning,
-    RF_NoFlags, RF_Public, RF_Standalone, RF_HasStack, RF_Marked,
-    CPF_NoFlags, CPF_EditConst, CPF_Const, CPF_Export, CPF_EditInline,
-    CPF_Net, CPF_EditAnywhere, CPF_Transient, CPF_Config, CPF_Localized, CPF_Travel,
-)
+    RF_NoFlags, RF_Transactional, RF_Unreachable, RF_Public, RF_Transient,
+    RF_Standalone, RF_HasStack, RF_Marked, RF_Native, RF_Load, RF_Keep,
+    RF_ScriptMask,
+    CPF_NoFlags, CPF_Edit, CPF_Const, CPF_Net, CPF_Parm, CPF_Native,
+    CPF_Transient, CPF_Config, CPF_Localized, CPF_Travel, CPF_EditConst,
+    CLASS_Abstract, CLASS_Config, CLASS_Transient, CLASS_NativeReplication,
+    LOAD_NoFail, LOAD_Quiet,
+    PKG_AllowDownload, PKG_ClientOptional, PKG_ServerSideOnly, PKG_BrokenLinks,
+    PKG_Unsecure, PKG_Need,
+    PPF_Localized, PPF_Delimited,
+) 
 
 from .system import (
     FArchive, FArchiveFileReader, FArchiveMemoryReader, FArchiveFileWriter,
@@ -92,4 +99,16 @@ __all__ = [
     'PACKAGE_FILE_TAG', 'PACKAGE_FILE_VERSION', 'PACKAGE_FILE_VERSION_LICENSEE',
     'PACKAGE_MIN_VERSION', 'VERSION_ENGINE_ONLY',
     'VER_GUID_AND_GENERATIONS', 'VER_SIZED_NAME_TABLE',
+    'RF_NoFlags', 'RF_Transactional', 'RF_Unreachable', 'RF_Public',
+    'RF_Transient', 'RF_Standalone', 'RF_HasStack', 'RF_Marked', 'RF_Native',
+    'RF_Load', 'RF_Keep', 'RF_ScriptMask',
+    'CPF_NoFlags', 'CPF_Edit', 'CPF_Const', 'CPF_Net', 'CPF_Parm', 'CPF_Native',
+    'CPF_Transient', 'CPF_Config', 'CPF_Localized', 'CPF_Travel',
+    'CPF_EditConst',
+    'CLASS_Abstract', 'CLASS_Config', 'CLASS_Transient',
+    'CLASS_NativeReplication',
+    'LOAD_NoFail', 'LOAD_Quiet',
+    'PKG_AllowDownload', 'PKG_ClientOptional', 'PKG_ServerSideOnly',
+    'PKG_BrokenLinks', 'PKG_Unsecure', 'PKG_Need',
+    'PPF_Localized', 'PPF_Delimited',
 ]
