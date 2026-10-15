@@ -49,50 +49,49 @@ class GLWidget(QGLWidget):
         if self._renderer:
             self._renderer.begin_scene()
 
-            # Update cube angle
+            # Rotate objects each frame
             self._cube_angle += 1.0
             if self._cube_angle >= 360.0:
                 self._cube_angle -= 360.0
 
-            # Draw a rotating red cube (larger, closer)
+            # ---- Red cube (left) ----
             self._renderer.set_color(1.0, 0.0, 0.0)
             self._renderer.load_identity()
-            self._renderer.translate(0.0, 0.0, -8.0)
+            self._renderer.translate(-2.0, 1.0, -8.0)
             self._renderer.rotate(self._cube_angle, 0.0, 1.0, 0.0)
-            self._renderer.draw_cube(0.0, 0.0, 0.0, 4.0)
+            self._renderer.draw_cube(0.0, 0.0, 0.0, 1.5)
 
-            # Draw a green line across the scene
+            # ---- Green line (middle-left) ----
             self._renderer.set_color(0.0, 1.0, 0.0)
             self._renderer.load_identity()
-            self._renderer.translate(0.0, 0.0, -7.0)
-            self._renderer.draw_line(-3.0, 0.0, 0.0, 3.0, 0.0, 0.0)
+            self._renderer.translate(-1.0, 0.0, -7.0)
+            self._renderer.draw_line(-1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
-            # Draw a blue sphere (closer, in front of cube)
+            # ---- Blue sphere (center) ----
             self._renderer.set_color(0.0, 0.5, 1.0)
             self._renderer.load_identity()
-            self._renderer.translate(0.0, 0.0, -6.0)
-            self._renderer.draw_sphere(0.0, 0.0, 0.0, 1.5, 24)
+            self._renderer.translate(0.0, -1.0, -7.0)
+            self._renderer.draw_sphere(0.0, 0.0, 0.0, 1.0, 24)
 
-            # Draw a yellow pyramid for extra visual interest
+            # ---- Yellow pyramid (middle-right) ----
             self._renderer.set_color(1.0, 1.0, 0.0)
             self._renderer.load_identity()
-            self._renderer.translate(0.0, 0.0, -5.0)
-            self._renderer.rotate(45.0, 1.0, 0.0, 0.0)
+            self._renderer.translate(1.0, 1.0, -7.0)
+            self._renderer.rotate(self._cube_angle * 0.5, 1.0, 0.0, 0.0)
             self._draw_pyramid(self._renderer, 1.0)
 
-            # Draw a magenta cylinder
+            # ---- Magenta cylinder (right) ----
             self._renderer.set_color(1.0, 0.0, 1.0)
             self._renderer.load_identity()
-            self._renderer.translate(-2.0, 0.0, -4.0)
-            self._renderer.rotate(45.0, 0.0, 1.0, 0.0)
-            self._draw_cylinder(self._renderer, 0.8, 1.5)
+            self._renderer.translate(2.0, -1.0, -7.0)
+            self._renderer.rotate(self._cube_angle * 0.5, 0.0, 1.0, 0.0)
+            self._draw_cylinder(self._renderer, 0.6, 1.2)
 
-            # Draw a white teapot-like shape (just a sphere with facets)
+            # ---- White sphere (far right) ----
             self._renderer.set_color(1.0, 1.0, 1.0)
             self._renderer.load_identity()
-            self._renderer.translate(2.0, 0.0, -4.0)
-            self._renderer.rotate(self._cube_angle * 0.5, 0.0, 1.0, 0.0)
-            self._renderer.draw_sphere(0.0, 0.0, 0.0, 1.0, 16)
+            self._renderer.translate(3.0, 1.0, -7.0)
+            self._renderer.draw_sphere(0.0, 0.0, 0.0, 0.8, 16)
 
             self._renderer.end_scene()
 
