@@ -1058,6 +1058,12 @@ from .classes import (
     AActor_eventUnTouch_Parms, AActor_eventBump_Parms,
     AActor_eventBaseChange_Parms, AActor_eventAttach_Parms,
 )
+from .un_obj import (
+    EBspNodeFlags, FPointRegion, FBspNode,
+    FZoneProperties, FLeaf, FBspSurf, EPolyFlags,
+    FShadowMask, FLightMapIndex, ESplitType, FPoly,
+    UPolys, FVert, FDecal,
+)
 from .assets import (
     AssetLoader, GAssetLoader,
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
