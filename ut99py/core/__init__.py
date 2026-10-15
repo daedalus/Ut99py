@@ -65,6 +65,15 @@ from .system import (
     FFileManager,
 )
 
+from .cache import (
+    ECacheIDBase,
+    make_cache_id,
+    make_cache_id_with_objects,
+    make_cache_id_with_bytes,
+    make_cache_id_with_three_bytes,
+    make_cache_id_from_qword,
+)
+
 __all__ = [
     'FName', 'FString', 'FTime',
     'FVector', 'FPlane', 'FRotator', 'FQuat', 'FMatrix',
@@ -114,4 +123,10 @@ __all__ = [
     'PKG_AllowDownload', 'PKG_ClientOptional', 'PKG_ServerSideOnly',
     'PKG_BrokenLinks', 'PKG_Unsecure', 'PKG_Need',
     'PPF_Localized', 'PPF_Delimited',
+    'ECacheIDBase',
+    'make_cache_id',
+    'make_cache_id_with_objects',
+    'make_cache_id_with_bytes',
+    'make_cache_id_with_three_bytes',
+    'make_cache_id_from_qword',
 ]
