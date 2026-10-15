@@ -52,10 +52,16 @@ GCRCTABLE = [
 # Inline functions (UnFile.h 260-276, 331-345)
 
 def appToUpper(c: str) -> str:
-    return c if 'a' <= c <= 'z' else c.upper()
+    # UnFile.h:260: uppercase only 'a'..'z', pass anything else through.
+    if 'a' <= c <= 'z':
+        return chr(ord(c) + ord('A') - ord('a'))
+    return c
 
 def appToLower(c: str) -> str:
-    return c if 'A' <= c <= 'Z' else c.lower()
+    # UnFile.h:264: lowercase only 'A'..'Z', pass anything else through.
+    if 'A' <= c <= 'Z':
+        return chr(ord(c) + ord('a') - ord('A'))
+    return c
 
 def appIsAlpha(c: str) -> bool:
     return ('a' <= c <= 'z') or ('A' <= c <= 'Z')
