@@ -5,7 +5,7 @@ import io
 import re
 import struct
 
-from .types import FName, FString, TArray, FGuid, FCompactIndex, INDEX_NONE, ENAME_Log
+from .types import FName, FString, TArray, FGuid, FCompactIndex, INDEX_NONE, ENAME_Log, ENAME_Exit
 from .file_utils import appToUpper
 from .objver import (
     ENGINE_NEGOTIATION_VERSION,
@@ -556,34 +556,100 @@ class FOutputDeviceFile(FOutputDevice):
 
 
 class FMalloc:
-    def malloc(self, size: int) -> int:
+    """Allocator interface (Core.h:210-219); all methods pure virtual."""
+    def malloc(self, size: int, tag: str = '') -> int:
+        raise NotImplementedError
+    
+    def realloc(self, ptr: int, new_size: int, tag: str = '') -> int:
         raise NotImplementedError
     
     def free(self, ptr: int) -> None:
         raise NotImplementedError
     
-    def realloc(self, ptr: int, size: int) -> int:
+    def dump_allocs(self) -> None:
         raise NotImplementedError
     
-    def get_size(self, ptr: int) -> int:
-        return 0
+    def heap_check(self) -> None:
+        raise NotImplementedError
     
-    def get_physical_size(self, ptr: int) -> int:
-        return 0
+    def init(self) -> None:
+        raise NotImplementedError
+    
+    def exit(self) -> None:
+        raise NotImplementedError
+
+
+_LIBC = None
+
+
+def _get_libc():
+    """Process-local C library; set 64-bit-safe pointer signatures."""
+    global _LIBC
+    if _LIBC is None:
+        import ctypes
+        libc = ctypes.CDLL(None)
+        libc.malloc.restype = ctypes.c_void_p
+        libc.malloc.argtypes = [ctypes.c_size_t]
+        libc.realloc.restype = ctypes.c_void_p
+        libc.realloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        libc.free.argtypes = [ctypes.c_void_p]
+        _LIBC = libc
+    return _LIBC
 
 
 class FMallocAnsi(FMalloc):
-    def __init__(self):
-        pass
+    """ANSI C allocator (Core/Inc/FMallocAnsi.h).
+
+    C++ hands out raw malloc pointers; Python represents them as int
+    addresses via ctypes (retypes are set to pointer width, else the
+    address truncates to 32 bits). Tag feeds C++ unguardf diagnostics
+    only; unused here.
+    """
+    def malloc(self, size: int, tag: str = '') -> int:
+        # FMallocAnsi.h:16-24: check(Size>0); malloc; check(Ptr).
+        if size <= 0:
+            raise ValueError(f'FMallocAnsi: size must be >0, got {size}')
+        ptr = _get_libc().malloc(size)
+        if not ptr:
+            raise MemoryError(f'FMallocAnsi: malloc({size}) failed')
+        return ptr
     
-    def malloc(self, size: int) -> int:
-        import ctypes
-        return ctypes.windll.kernel32.LocalAlloc(0, size) if hasattr(ctypes, 'windll') else 0
+    def realloc(self, ptr: int, new_size: int, tag: str = '') -> int:
+        # FMallocAnsi.h:25-46: NULL/zero-size branches; C++ checks
+        # NewSize>=0 but never the result, so NULL propagates as 0.
+        if new_size < 0:
+            raise ValueError(f'FMallocAnsi: new_size must be >=0, got {new_size}')
+        libc = _get_libc()
+        if ptr and new_size:
+            return libc.realloc(ptr, new_size) or 0
+        if new_size:
+            return libc.malloc(new_size) or 0
+        if ptr:
+            libc.free(ptr)
+        return 0
     
     def free(self, ptr: int) -> None:
-        import ctypes
-        if ptr and hasattr(ctypes, 'windll'):
-            ctypes.windll.kernel32.LocalFree(ptr)
+        # FMallocAnsi.h:47-52; free(NULL) is a C no-op.
+        if ptr:
+            _get_libc().free(ptr)
+    
+    def dump_allocs(self) -> None:
+        # debugf(NAME_Exit, "Allocation checking disabled")
+        # (FMallocAnsi.h:53-58); debugf is unported, so GLog carries it.
+        GLog.serialize('Allocation checking disabled', ENAME_Exit)
+    
+    def heap_check(self) -> None:
+        # FMallocAnsi.h:59-71: the body is #if _MSC_VER only; a no-op on
+        # the Unix toolchain this port targets.
+        pass
+    
+    def init(self) -> None:
+        # FMallocAnsi.h:72-76: no-op in the C++ too.
+        pass
+    
+    def exit(self) -> None:
+        # FMallocAnsi.h:77-81: no-op in the C++ too.
+        pass
 
 
 class FFileManager:

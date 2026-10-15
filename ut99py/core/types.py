@@ -235,6 +235,7 @@ ENAME_Log = FName("Log")
 ENAME_Event = FName("Event")
 ENAME_Warning = FName("Warning")
 ENAME_Error = FName("Error")
+ENAME_Exit = FName("Exit")
 
 
 class FString(str):
