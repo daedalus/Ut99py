@@ -101,6 +101,15 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       (line 260-276), `appStrihash` (line 331-345). CORE_API declared
       functions documented as unimplemented (bodies in Core.lib). Validated:
       `len(GCRCTABLE) == 256`; `appStrihash('Hello')` produces consistent hash.
+- [x] `Core/Inc/FRiffChunk.h` → `core/riff.py`: the whole header is inline.
+      `app_four_cc` (FRiffChunk.h:14) plus the chunk tree `FRiffChunk`/
+      `FRiffChunk_RIFF`/`FRiffChunk_fmt`/`FRiffChunk_data`/`FRiffChunk_WAVE`
+      (`SerializeChunk`/`CreateSubChunk`/`Load`/`Save`), and
+      `load_riff_file`/`save_riff_file`. `FBufferReader` (UnTemplate.h:1534) is
+      `FArchiveMemoryReader`; `appLoadFileToArray`/`FFileManager` bodies are in
+      Core.lib, so the file helpers open the file directly. `FArchiveFileWriter`
+      gained a `seek` (the C++ writer is seekable; `Save` patches the chunk size
+      in place). Pinned by `tests/test_riff.py`.
 - [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader` (appFindPackageFile,
       file-path utilities; full CORE_API bodies remain in Core.lib).
 - [ ] `ut99py/core/objects.py` object-model gaps (there is no `UnObj.h`; the

@@ -457,6 +457,12 @@ class FArchiveFileWriter(FArchive):
         self._size = max(self._size, self._pos)
         return len(data)
     
+    def seek(self, pos: int) -> None:
+        # The C++ file writer is seekable; FRiffChunk::Save (FRiffChunk.h:94)
+        # relies on this to patch a chunk-size field after the body is written.
+        self._file.seek(pos)
+        self._pos = pos
+    
     def close(self) -> None:
         self._file.close()
         super().close()
