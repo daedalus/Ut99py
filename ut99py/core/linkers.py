@@ -1,3 +1,6 @@
+"""Port of Core/Inc/UnLinker.h (ULinker/ULinkerLoad/ULinkerSave,
+FGenerationInfo, FObjectExport, FObjectImport, FPackageFileSummary)."""
+
 from typing import Optional, List, Dict, Any
 from ut99py.core import FName, FString, UObject, UStruct, FArchive, FArchiveFileReader
 from ut99py.core.objver import (
