@@ -398,3 +398,51 @@ def test_dependency_defaults_are_zeroed():
     assert dep.class_ is None
     assert dep.deep is False
     assert dep.script_text_crc == 0
+
+
+def test_struct_properties_size_accessors():
+    # UStruct::SetPropertiesSize (UnClass.h:248) / GetPropertiesSize (UnClass.h:240).
+    struct = UStruct()
+    assert struct.get_properties_size() == 0
+    struct.set_properties_size(32)
+    assert struct.get_properties_size() == 32
+
+
+def test_struct_get_name_cpp_prefixes_an_f():
+    # UStruct::GetNameCPP (UnClass.h:261) formats "F%s".
+    struct = UStruct()
+    struct._name = FName("MyStruct")
+    assert struct.get_name_cpp() == "FMyStruct"
+
+
+def test_class_get_name_cpp_uses_the_actor_prefix():
+    # UClass::GetNameCPP (UnClass.h:453): "A" when the class or an ancestor is
+    # named Actor, otherwise "U".
+    base = UClass()
+    base._name = FName("Actor")
+    derived = UClass()
+    derived._name = FName("MyActor")
+    derived._super_field = base
+    assert derived.get_name_cpp() == "AMyActor"
+
+    plain = UClass()
+    plain._name = FName("MyClass")
+    assert plain.get_name_cpp() == "UMyClass"
+
+
+def test_merge_bools_overrides_per_subclass():
+    # UFunction::MergeBools (UnClass.h:316) is 0; UState (UnClass.h:360) and
+    # UClass (UnClass.h:451) are 1.
+    assert UFunction().merge_bools() is False
+    assert UState().merge_bools() is True
+    assert UClass().merge_bools() is True
+
+
+def test_get_default_object_needs_a_value_model():
+    # UClass::GetDefaultObject (UnClass.h:483) needs the raw Defaults buffer
+    # materialised through a value model the port does not have yet.
+    cls = UClass()
+    with pytest.raises(NotImplementedError):
+        cls.get_default_object()
+    with pytest.raises(NotImplementedError):
+        cls.get_default_actor()  # UnClass.h:490 returns the same pointer.

@@ -408,6 +408,19 @@ class UStruct(UField):
         """UStruct::GetInheritanceSuper (UnClass.h:234)."""
         return self.get_super_struct()
     
+    def get_properties_size(self) -> int:
+        """UStruct::GetPropertiesSize (UnClass.h:240): overrides the UField
+        virtual (whose body is in Core.lib)."""
+        return self._property_size
+    
+    def set_properties_size(self, new_size: int) -> None:
+        """UStruct::SetPropertiesSize (UnClass.h:248)."""
+        self._property_size = new_size
+    
+    def get_name_cpp(self) -> str:
+        """UStruct::GetNameCPP (UnClass.h:261): the C++ name prefixed with 'F'."""
+        return f"F{self.name}"
+    
     def is_child_of(self, some_base: Optional['UStruct']) -> bool:
         """UStruct::IsChildOf (UnClass.h:252)."""
         struct: Optional[UStruct] = self
@@ -457,6 +470,10 @@ class UFunction(UStruct):
         inherit properties."""
         return None
     
+    def merge_bools(self) -> bool:
+        """UFunction::MergeBools (UnClass.h:316)."""
+        return False
+    
     def get_super_function(self) -> Optional['UFunction']:
         """UFunction::GetSuperFunction (UnClass.h:321); checkSlow note in
         UStruct.get_super_struct."""
@@ -479,6 +496,10 @@ class UState(UStruct):
         """UState::GetInheritanceSuper (UnClass.h:361)."""
         return self.get_super_state()
     
+    def merge_bools(self) -> bool:
+        """UState::MergeBools (UnClass.h:360)."""
+        return True
+    
     def get_super_state(self) -> Optional['UState']:
         """UState::GetSuperState (UnClass.h:365); checkSlow note in
         UStruct.get_super_struct."""
@@ -495,13 +516,27 @@ class UClass(UStruct):
     
     def __init__(self):
         super().__init__()
-        self._default_object: Optional[UObject] = None
         self._defaults: list[bytes] = []
         self._dependencies: list['FDependency'] = []
     
     def get_inheritance_super(self) -> Optional[UStruct]:
         """UClass::GetInheritanceSuper (UnClass.h:452)."""
         return self.get_super_class()
+    
+    def merge_bools(self) -> bool:
+        """UClass::MergeBools (UnClass.h:451)."""
+        return True
+    
+    def get_name_cpp(self) -> str:
+        """UClass::GetNameCPP (UnClass.h:453): 'A' when the class or an ancestor
+        is named Actor, otherwise 'U'."""
+        cls: Optional[UClass] = self
+        while cls is not None:
+            if str(cls.name).casefold() == "actor":
+                break
+            cls = cls.get_super_class()
+        prefix = "A" if cls is not None else "U"
+        return f"{prefix}{self.name}"
     
     def get_super_class(self) -> Optional['UClass']:
         """UClass::GetSuperClass (UnClass.h:477). Unlike the other GetSuper*
@@ -521,9 +556,19 @@ class UClass(UStruct):
             self._dependencies.append(FDependency(in_class, deep))
     
     def get_default_object(self) -> UObject:
-        if self._default_object is None:
-            self._default_object = object.__new__(self)
-        return self._default_object
+        """UClass::GetDefaultObject (UnClass.h:483): the C++ returns
+        `(UObject*)&Defaults(0)` -- a raw pointer into the Defaults byte buffer
+        reinterpreted as a UObject. The port has no per-type value model to
+        materialise one, so this is unimplemented rather than fabricated."""
+        raise NotImplementedError(
+            "UClass.GetDefaultObject needs a Python value model for the raw "
+            "Defaults buffer (see TODO.md object-model gaps)"
+        )
+    
+    def get_default_actor(self) -> UObject:
+        """UClass::GetDefaultActor (UnClass.h:490): the C++ returns the same
+        `&Defaults(0)` pointer as GetDefaultObject, cast to AActor*."""
+        return self.get_default_object()
     
     def static_config_name(self) -> FName:
         return FName(f"{str(self.name)}_Default")

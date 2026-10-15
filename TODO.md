@@ -65,6 +65,13 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       `get_super_function`, `UState.get_super_state`,
       `UProperty.get_size` (`ArrayDim*ElementSize`) / `should_serialize_value`.
       `FName.get_index` (`UnName.h:73`) added for the object hash.
+- [x] `Core/Inc/UnClass.h` remaining inline accessors → `core/objects.py`:
+      `UStruct.get_properties_size`/`set_properties_size` (UnClass.h:240,248)/
+      `get_name_cpp` (:261), `UFunction.merge_bools` (:316),
+      `UState.merge_bools` (:360), `UClass.merge_bools` (:451)/
+      `get_name_cpp` (:453, the Actor-prefix variant)/`get_default_actor`
+      (:490). `UClass.get_default_object` (:483, the raw `&Defaults(0)` pointer)
+      now raises `NotImplementedError` instead of fabricating an object.
 - [x] `FArchive.serialize_qword`/`serialize_sqword` (`UnArc.h:182-191`). The old
       `serialize_double` claimed to be this operator but packed an IEEE-754
       `double`; `QWORD`/`SQWORD` are 64-bit ints (`UnGnuG.h:127,136`).
@@ -93,8 +100,9 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       `UProperty::Matches`/`Identical` and `UStruct::StructCompare` operate on
       raw pointers and per-type `Identical` bodies that live in `Core.lib`, so
       they need a Python value model before they can be ported faithfully.
-      `UClass::GetDefaultObject` still fabricates an empty object rather than
-      reading `Defaults(0)`; `UObject::IsA` uses `isinstance` instead of the C++
+      `UClass::GetDefaultObject` (UnClass.h:483) returns a raw `&Defaults(0)`
+      pointer, so it now raises `NotImplementedError` rather than fabricating;
+      `UObject::IsA` uses `isinstance` instead of the C++
       `UClass` walk; `UStruct::Link`/`UClass::Bind`/`StaticAllocateObject` are the
       `Core.lib` construction path.
 - [x] `Core/Inc/UnCoreNet.h` inline members → `core/net.py`: `FFieldNetCache`
@@ -104,7 +112,19 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       (:132), and `FPropertyRetirement` (:140). The CORE_API ctors and
       `operator<<` bodies remain in Core.lib (documented); the `UPackageMap`
       stub stays in `core/objects.py`. Pinned by `tests/test_net.py`.
-- [ ] `Core/Inc/UnClass.h`, `UnScript.h` → property/script metaclasses.
+- [x] `Core/Inc/UnScript.h` FFrame inline members → `core/script.py`
+      (`FFrame` ctor/`step`/`read_int`/`read_object`/`read_float`/`read_word`/
+      `read_name`, UnScript.h:103-178) plus the previously missing `FStateFrame`
+      (UnScript.h:185-194, declared in UnStack.h:222) with its ctor and
+      `describe`. Fixed two latent bugs the earlier port left: `InObject.GetClass()`
+      → `get_class()` and `InNode.Script(CodeOffset)` → the script-buffer slice;
+      `read_word` now reads an unsigned `_WORD` (UnGnuG.h:125), not a signed
+      value. Pinned by `tests/test_script.py`. `GNatives`/`GRegisterNative` and
+      the `P_GET_*` macros remain undocumented C++ preprocessor/dispatch details.
+- [ ] `Core/Inc/UnType.h` property metaclasses: `UProperty::Matches`/`Identical`
+      and the concrete `Identical`/`SerializeItem`/`ExportTextItem`/`ImportText`
+      bodies are in `Core.lib` and need the Python value model (see object-model
+      gaps above); `UClassProperty.GetID` (UnType.h:286) needs `UClassProperty`.
 
 ## Known deviations to reconcile
 - Python `NAME_*` in `core/types.py` are `FName` objects, not the C++ `EName`
