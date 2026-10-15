@@ -1,10 +1,12 @@
 """Core system: FArchive, serialization, config"""
 
-from typing import TYPE_CHECKING, Optional, Any
+from typing import TYPE_CHECKING, Iterator, Optional, Any
 import io
+import re
 import struct
 
 from .types import FName, FString, TArray, FGuid, FCompactIndex, INDEX_NONE, ENAME_Log
+from .file_utils import appToUpper
 from .objver import (
     ENGINE_NEGOTIATION_VERSION,
     PACKAGE_FILE_VERSION,
@@ -652,58 +654,367 @@ class FFileManager:
         return [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d))]
 
 
+def _app_stricmp(str1: str, str2: str) -> int:
+    """appStricmp (UnFile.h:298): ASCII case-insensitive compare."""
+    for c1, c2 in zip(str1, str2):
+        u1, u2 = appToUpper(c1), appToUpper(c2)
+        if u1 != u2:
+            return ord(u1) - ord(u2)
+    return len(str1) - len(str2)
+
+
+def _app_strcmp(str1: str, str2: str) -> int:
+    """appStrcmp (UnFile.h:297): exact compare (sign only matters)."""
+    if str1 == str2:
+        return 0
+    return -1 if str1 < str2 else 1
+
+
+# appAtoi/appAtof (UnFile.h:310, bodies in Core.lib) follow C atoi/atof: parse a
+# leading number, stop at the first invalid character, yield 0 when there is
+# none.
+_ATOI_RE = re.compile(r"[ \t\r\n\f\v]*[+-]?\d+")
+_ATOF_RE = re.compile(r"[ \t\r\n\f\v]*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
+
+
+def _app_atoi(text: str) -> int:
+    match = _ATOI_RE.match(text)
+    return int(match.group()) if match else 0
+
+
+def _app_atof(text: str) -> float:
+    match = _ATOF_RE.match(text)
+    return float(match.group()) if match else 0.0
+
+
+def _file_size(filename: str) -> int:
+    """FFileManager::FileSize (Core.h:318) as used by Find: -1 when missing."""
+    import os
+    try:
+        return os.path.getsize(filename)
+    except OSError:
+        return -1
+
+
+def _load_file_to_string(filename: str) -> Optional[str]:
+    """appLoadFileToString (UnFile.h:416): whole file as ANSI (latin-1).
+
+    The C++ routes through GFileManager (body in Core.lib); the port reads the
+    file directly, as core/riff.py does. Returns None when it cannot open.
+    """
+    try:
+        with open(filename, "rb") as handle:
+            return handle.read().decode("latin-1")
+    except OSError:
+        return None
+
+
+def _save_string_to_file(text: str, filename: str) -> bool:
+    """appSaveStringToFile (UnFile.h:418). Returns True on success."""
+    try:
+        with open(filename, "wb") as handle:
+            handle.write(text.encode("latin-1"))
+        return True
+    except OSError:
+        return False
+
+
+def _split_lines(text: str) -> Iterator[str]:
+    """Split on \\r/\\n runs, as FConfigFile::Read walks its buffer (FConfigCacheIni.h:36-45)."""
+    length = len(text)
+    ptr = 0
+    while ptr < length:
+        while ptr < length and text[ptr] in "\r\n":
+            ptr += 1
+        start = ptr
+        while ptr < length and text[ptr] not in "\r\n":
+            ptr += 1
+        yield text[start:ptr]
+
+
+def _split_pair(line: str) -> Optional[tuple[str, str]]:
+    """Key/Value of one line: split at the first '=', strip one quote pair
+    (FConfigCacheIni.h:56-65). None when the line has no '='."""
+    eq = line.find("=")
+    if eq < 0:
+        return None
+    value = line[eq + 1:]
+    # The C++ misses the degenerate single-quote case; the len check avoids it.
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        value = value[1:-1]
+    return line[:eq], value
+
+
+class FConfigSection:
+    """FConfigSection (FConfigCacheIni.h:14): TMultiMap<FString,FString>.
+
+    Kept as an insertion-ordered list of (Key,Value) pairs. TMapBase::Add
+    appends (UnTemplate.h:1634) and each hash bucket is LIFO, so Find returns
+    the most recently added duplicate (UnTemplate.h:1718).
+    """
+
+    def __init__(self) -> None:
+        self._pairs: list[tuple[str, str]] = []
+
+    def add(self, key: str, value: str) -> str:
+        """TMultiMap::Add (UnTemplate.h:1814): append a pair."""
+        self._pairs.append((key, value))
+        return value
+
+    def find(self, key: str) -> Optional[str]:
+        """TMapBase::Find (UnTemplate.h:1718): newest value for Key, else None."""
+        index = self._find_index(key)
+        return None if index < 0 else self._pairs[index][1]
+
+    def set(self, key: str, value: str) -> None:
+        """SetString's `*Str = Value` (FConfigCacheIni.h:222): update in place."""
+        index = self._find_index(key)
+        if index >= 0:
+            self._pairs[index] = (key, value)
+
+    def empty(self) -> None:
+        """TMapBase::Empty (UnTemplate.h:1688)."""
+        self._pairs.clear()
+
+    def _find_index(self, key: str) -> int:
+        for index in range(len(self._pairs) - 1, -1, -1):
+            if self._pairs[index][0] == key:
+                return index
+        return -1
+
+    def __iter__(self) -> Iterator[tuple[str, str]]:
+        return iter(self._pairs)
+
+    def __len__(self) -> int:
+        return len(self._pairs)
+
+
+class FConfigFile:
+    """FConfigFile (FConfigCacheIni.h:18): TMap<FString,FConfigSection> + flags."""
+
+    def __init__(self) -> None:
+        self.dirty: bool = False
+        self.no_save: bool = False
+        self._sections: dict[str, FConfigSection] = {}
+
+    def find(self, section: str) -> Optional[FConfigSection]:
+        """TMapBase::Find (UnTemplate.h:1718)."""
+        return self._sections.get(section)
+
+    def set(self, section: str, value: FConfigSection) -> FConfigSection:
+        """TMapBase::Set (UnTemplate.h:1697): update in place or append."""
+        self._sections[section] = value
+        return value
+
+    def empty(self) -> None:
+        """TMapBase::Empty (UnTemplate.h:1688)."""
+        self._sections.clear()
+
+    def read(self, filename: str) -> None:
+        """FConfigFile::Read (FConfigCacheIni.h:26)."""
+        self.empty()
+        text = _load_file_to_string(filename)
+        if text is None:
+            return
+        current: Optional[FConfigSection] = None
+        for line in _split_lines(text):
+            if line.startswith("[") and line.endswith("]"):
+                name = line[1:-1]
+                section = self.find(name)
+                if section is None:
+                    section = self.set(name, FConfigSection())
+                current = section
+            elif current is not None and line:
+                pair = _split_pair(line)
+                if pair is not None:
+                    current.add(*pair)
+
+    def write(self, filename: str) -> bool:
+        """FConfigFile::Write (FConfigCacheIni.h:72)."""
+        if not self.dirty or self.no_save:
+            return True
+        self.dirty = False
+        parts: list[str] = []
+        for name, section in self._sections.items():
+            parts.append(f"[{name}]\r\n")
+            for key, value in section:
+                parts.append(f"{key}={value}\r\n")
+            parts.append("\r\n")
+        return _save_string_to_file("".join(parts), filename)
+
+    def __len__(self) -> int:
+        return len(self._sections)
+
+
 class FConfigCacheIni:
-    def __init__(self):
-        self._sections: dict[str, dict[str, str]] = {}
-    
-    def get_string(self, group: str, key: str) -> str:
-        if group in self._sections and key in self._sections[group]:
-            return self._sections[group][key]
-        return ""
-    
-    def get_int(self, group: str, key: str, default: int = 0) -> int:
-        val = self.get_string(group, key)
-        if val:
-            try:
-                return int(val)
-            except ValueError:
-                pass
-        return default
-    
-    def get_float(self, group: str, key: str, default: float = 0.0) -> float:
-        val = self.get_string(group, key)
-        if val:
-            try:
-                return float(val)
-            except ValueError:
-                pass
-        return default
-    
-    def get_bool(self, group: str, key: str, default: bool = False) -> bool:
-        val = self.get_string(group, key)
-        if val:
-            return val.lower() in ('true', '1', 'yes', 'on')
-        return default
-    
-    def set_string(self, group: str, key: str, value: str) -> None:
-        if group not in self._sections:
-            self._sections[group] = {}
-        self._sections[group][key] = value
-    
-    def set_int(self, group: str, key: str, value: int) -> None:
-        self.set_string(group, key, str(value))
-    
-    def set_float(self, group: str, key: str, value: float) -> None:
-        self.set_string(group, key, str(value))
-    
-    def set_bool(self, group: str, key: str, value: bool) -> None:
-        self.set_string(group, key, "True" if value else "False")
-    
-    def flush(self) -> None:
-        pass
-    
-    def close(self) -> None:
-        pass
+    """FConfigCacheIni (FConfigCacheIni.h:92): the INI config database.
+
+    Implements the FConfigCache interface (Core.h:223) and the
+    TMap<FString,FConfigFile> of cached files. `filename` selects the file
+    (None uses SystemIni, as the C++ NULL does); a None return mirrors the C++
+    0/NULL failure result instead of fabricating an empty value.
+    """
+
+    def __init__(self) -> None:
+        self.system_ini: str = ""
+        self.user_ini: str = ""
+        self._files: dict[str, FConfigFile] = {}
+
+    def find(self, filename: Optional[str], create_if_not_found: bool) -> Optional[FConfigFile]:
+        """FConfigCacheIni::Find (FConfigCacheIni.h:105)."""
+        name = filename if filename else self.system_ini
+        length = len(name)
+        # Add ".ini" unless a dot sits at either extension position (:114).
+        if length < 5 or (name[length - 4] != "." and name[length - 5] != "."):
+            name += ".ini"
+        if _app_stricmp(name, "User.ini") == 0:
+            name = self.user_ini
+        elif _app_stricmp(name, "System.ini") == 0:
+            name = self.system_ini
+        result = self._files.get(name)
+        if result is None and (create_if_not_found or _file_size(name) >= 0):
+            result = self._files.setdefault(name, FConfigFile())
+            result.read(name)
+        return result
+
+    def flush(self, read: bool, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::Flush (FConfigCacheIni.h:135)."""
+        for name, config in self._files.items():
+            if filename is None or name == filename:
+                config.write(name)
+        if not read:
+            return
+        if filename is not None:
+            self._files.pop(filename, None)
+        else:
+            self._files.clear()
+
+    def detach(self, filename: str) -> None:
+        """FConfigCacheIni::Detach (FConfigCacheIni.h:150)."""
+        config = self.find(filename, True)
+        if config is not None:
+            config.no_save = True
+
+    def get_string(self, section: str, key: str, filename: Optional[str] = None) -> Optional[str]:
+        """FConfigCacheIni::GetString (FConfigCacheIni.h:158,263): the value, or
+        None where the C++ returns 0 (missing file, section or key)."""
+        config = self.find(filename, False)
+        if config is None:
+            return None
+        sec = config.find(section)
+        if sec is None:
+            return None
+        return sec.find(key)
+
+    def get_str(self, section: str, key: str, filename: Optional[str] = None) -> str:
+        """FConfigCacheIni::GetStr (FConfigCacheIni.h:278): "" when missing."""
+        value = self.get_string(section, key, filename)
+        return value if value is not None else ""
+
+    def get_section(self, section: str, filename: Optional[str] = None, size: int = 1024) -> Optional[str]:
+        """FConfigCacheIni::GetSection (FConfigCacheIni.h:175): the section as
+        the C++ NUL-separated buffer ``key=value\\0...\\0``; None when missing."""
+        config = self.find(filename, False)
+        if config is None:
+            return None
+        sec = config.find(section)
+        if sec is None:
+            return None
+        out = ""
+        for key, value in sec:
+            if len(out) + len(key) + 1 < size:
+                out += f"{key}={value}\0"
+        return out + "\0"
+
+    def get_section_private(self, section: str, force: bool, const: bool,
+                            filename: Optional[str] = None) -> Optional[FConfigSection]:
+        """FConfigCacheIni::GetSectionPrivate (FConfigCacheIni.h:192)."""
+        config = self.find(filename, force)
+        if config is None:
+            return None
+        sec = config.find(section)
+        if sec is None and force:
+            sec = config.set(section, FConfigSection())
+        if sec is not None and (force or not const):
+            config.dirty = True
+        return sec
+
+    def set_string(self, section: str, key: str, value: str, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::SetString (FConfigCacheIni.h:206)."""
+        config = self.find(filename, True)
+        sec = config.find(section)
+        if sec is None:
+            sec = config.set(section, FConfigSection())
+        current = sec.find(key)
+        if current is None:
+            sec.add(key, value)
+            config.dirty = True
+        elif _app_stricmp(current, value) != 0:
+            config.dirty = _app_strcmp(current, value) != 0
+            sec.set(key, value)
+
+    def empty_section(self, section: str, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::EmptySection (FConfigCacheIni.h:226)."""
+        config = self.find(filename, False)
+        if config is None:
+            return
+        sec = config.find(section)
+        if sec is not None and len(sec) > 0:
+            sec.empty()
+            config.dirty = True
+
+    def init(self, system_ini: str, user_ini: str, require_config: bool = False) -> None:
+        """FConfigCacheIni::Init (FConfigCacheIni.h:241). RequireConfig is unused
+        in the C++ body too."""
+        self.system_ini = system_ini
+        self.user_ini = user_ini
+
+    def exit(self) -> None:
+        """FConfigCacheIni::Exit (FConfigCacheIni.h:248)."""
+        self.flush(True)
+
+    def dump(self, out: FOutputDevice) -> None:
+        """FConfigCacheIni::Dump (FConfigCacheIni.h:254). The C++ then dumps the
+        TMap; the port logs the file/section counts."""
+        out.serialize("Files map:")
+        for name, config in self._files.items():
+            out.serialize(f"   {name}: {len(config)} sections")
+
+    def get_int(self, section: str, key: str, filename: Optional[str] = None) -> Optional[int]:
+        """FConfigCacheIni::GetInt (FConfigCacheIni.h:286)."""
+        text = self.get_string(section, key, filename)
+        return None if text is None else _app_atoi(text)
+
+    def get_float(self, section: str, key: str, filename: Optional[str] = None) -> Optional[float]:
+        """FConfigCacheIni::GetFloat (FConfigCacheIni.h:304)."""
+        text = self.get_string(section, key, filename)
+        return None if text is None else _app_atof(text)
+
+    def get_bool(self, section: str, key: str, filename: Optional[str] = None) -> Optional[bool]:
+        """FConfigCacheIni::GetBool (FConfigCacheIni.h:322)."""
+        text = self.get_string(section, key, filename)
+        if text is None:
+            return None
+        if _app_stricmp(text, "True") == 0:
+            return True
+        return _app_atoi(text) == 1
+
+    def set_int(self, section: str, key: str, value: int, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::SetInt (FConfigCacheIni.h:347): "%i"."""
+        self.set_string(section, key, f"{value}", filename)
+
+    def set_float(self, section: str, key: str, value: float, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::SetFloat (FConfigCacheIni.h:361): "%f" (6 decimals)."""
+        self.set_string(section, key, f"{value:.6f}", filename)
+
+    def set_bool(self, section: str, key: str, value: bool, filename: Optional[str] = None) -> None:
+        """FConfigCacheIni::SetBool (FConfigCacheIni.h:375): "True"/"False"."""
+        self.set_string(section, key, "True" if value else "False", filename)
+
+    @staticmethod
+    def factory() -> "FConfigCacheIni":
+        """FConfigCacheIni::Factory (FConfigCacheIni.h:389)."""
+        return FConfigCacheIni()
 
 
 class UFactory:

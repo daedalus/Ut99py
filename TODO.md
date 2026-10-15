@@ -110,6 +110,24 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       Core.lib, so the file helpers open the file directly. `FArchiveFileWriter`
       gained a `seek` (the C++ writer is seekable; `Save` patches the chunk size
       in place). Pinned by `tests/test_riff.py`.
+- [x] `Core/Inc/FConfigCacheIni.h` → `core/system.py` (replacing the initial
+      commit's stub, which ignored `Filename` and returned `""`/`0` for missing
+      keys): `FConfigSection` (TMultiMap<FString,FString>, insertion-ordered
+      pairs; `Find` yields the newest duplicate per UnTemplate.h:1634,1718),
+      `FConfigFile` (TMap<FString,FConfigSection> + `Dirty`/`NoSave`;
+      `Read`/`Write`), and the full `FConfigCacheIni` interface. `Read` splits
+      `[Section]` headers and `Key=Value` after the first `=` with one quote
+      pair stripped; `Write` emits `[Section]\r\n`, `Key=Value\r\n` per pair,
+      then a blank line. The numeric accessors use C `atoi`/`atof` and
+      `appStricmp`/"True" semantics; `GetString`/`GetInt`/`GetFloat`/`GetBool`
+      return `None` where the C++ buffer-out functions return 0. The
+      `appLoadFileToString`/`appSaveStringToFile` bodies are in Core.lib, so the
+      file is read/written directly (as `core/riff.py` does). Pinned by
+      `tests/test_config.py`.
+- [x] Fixed `core/file_utils.py` `appToUpper`/`appToLower` (UnFile.h:260-267):
+      the port had the branch condition inverted, so neither ever changed case
+      (and `appStrihash` hashed the wrong bytes). Pinned by
+      `tests/test_file_utils.py`.
 - [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader` (appFindPackageFile,
       file-path utilities; full CORE_API bodies remain in Core.lib).
 - [ ] `ut99py/core/objects.py` object-model gaps (there is no `UnObj.h`; the
@@ -196,3 +214,16 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
   type where the C++ `UProperty::Link` (in `Core.lib`) assigns `ElementSize`; the
   base class leaves it 0 because that body is unavailable. `UStrProperty`'s 16 is
   likewise the existing reconstruction.
+- `FConfigCache` (the pure-virtual config interface, Core.h:223) is not ported as
+  a separate base; `FConfigCacheIni` implements the whole interface directly, as
+  the repo did for the pure-virtual `FFileManager`.
+- `FConfigCacheIni.GetString`/`GetInt`/`GetFloat`/`GetBool`/`GetSection` return
+  the value or `None`, collapsing the C++ `UBOOL` + out-parameter pair; the
+  `GetStr`/`SetX` helpers keep the C++ buffer-string behaviour (`GetStr` yields
+  `""` when missing). `GetSection` returns the C++ NUL-separated
+  `key=value\0...\0` buffer as a `str`. `appAtoi`/`appAtof`/`appStricmp`/
+  `appStrcmp` are reconstructed from UnFile.h prototypes (bodies in Core.lib)
+  with C `atoi`/`atof` leading-number parsing.
+- `FConfigFile.Read` drops the degenerate single-`"` value case the C++ handles
+  by writing past the buffer (`FConfigCacheIni.h:60`): a value that is exactly
+  one `"` is kept verbatim instead of becoming empty.

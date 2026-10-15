@@ -22,7 +22,7 @@ from .core import (
     FArchive, FArchiveFileReader, FArchiveMemoryReader, FArchiveFileWriter,
     FOutputDevice, FOutputDeviceNull, FOutputDeviceStdout, FOutputDeviceFile,
     GNull, GLog, GError,
-    FFileManager, FConfigCacheIni,
+    FFileManager, FConfigCacheIni, FConfigFile, FConfigSection,
     FMalloc, FMallocAnsi,
 )
 
@@ -156,6 +156,8 @@ __all__ = [
     "GError",
     "FFileManager",
     "FConfigCacheIni",
+    "FConfigFile",
+    "FConfigSection",
     "FMalloc",
     "FMallocAnsi",
     "FObjectExport",
