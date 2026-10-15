@@ -76,6 +76,13 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       `serialize_double` claimed to be this operator but packed an IEEE-754
       `double`; `QWORD`/`SQWORD` are 64-bit ints (`UnGnuG.h:127,136`).
 
+## Audit (Oct 2026)
+
+*   **Ported Core Headers**: 16/20 (FCodec.h, FRiffChunk.h, UnArc.h, UnBits.h, UnClass.h, UnCoreNet.h, UnFile.h, UnNames.h, UnObjBas.h, UnObjVer.h, UnScript.h, UnStack.h, UnType.h, FConfigCacheIni.h, FFeedbackContextAnsi.h, FMallocAnsi.h).
+*   **Partially Ported Engine**: 3/40+ (UnMesh.h, UnTex.h, UPackage/UnPackage.h).
+*   **Detached/Legacy**: `engine/assets.py` (Redundant decoder, needs reconciliation).
+*   **Missing Metadata**: `engine/mesh.py` and `engine/texture.py` missing source citations.
+
 ## Next
 - [x] `ULinkerLoad::operator<<(UObject*&)` / `IndexToObject` (UnLinker.h:249-272)
       → `core/linkers.py`: the archive's `_serialize` now reads the compact
@@ -202,6 +209,16 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       and the concrete `Identical`/`SerializeItem`/`ExportTextItem`/`ImportText`
       bodies are in `Core.lib` and need the Python value model (see object-model
       gaps above); `UClassProperty.GetID` (UnType.h:286) needs `UClassProperty`.
+- [ ] **Metadata Compliance**: Add "Ported from" docstrings to `engine/mesh.py` and `engine/texture.py`.
+- [ ] **Reconciliation**: Merge `engine/assets.py` logic into `core/linkers.py` and delete the redundant loader.
+
+## Engine Subsystems Pending
+- [ ] **Networking**: `UnNet.h`, `UnNetDrv.h`, `UnChan.h`, `UnBunch.h`, `UnConn.h`, `UnDownload.h`, `UnDemoRec.h`.
+- [ ] **Actors & Game Logic**: `AActor.h`, `APawn.h`, `APlayerPawn.h`, `AWeapon.h`, `AInventory.h`, `APickup.h`, `AAmmo.h`, `AMover.h`, `ABrush.h`, `ACarcass.h`, `AZoneInfo.h`, `ALevelInfo.h`, `AGameReplicationInfo.h`, `APlayerReplicationInfo.h`.
+- [ ] **World/Bsp**: `UnLevel.h`, `UnModel.h`, `UnDynBsp.h`, `UnReach.h`, `ULevelSummary.h`.
+- [ ] **Rendering**: `UnRender.h`, `UnRenDev.h`, `Palette.h`, `S3tc.h`.
+- [ ] **Audio**: `Audio/Inc/AudioSubsystem.h`, `UnAudio.h`.
+- [ ] **Input & Engine Core**: `UnIn.h`, `UnCamera.h`, `UnEngine.h`, `UnGame.h`, `UnPlayer.h`, `UnURL.h`.
 
 ## Known deviations to reconcile
 - Python `NAME_*` in `core/types.py` are `FName` objects, not the C++ `EName`
