@@ -1077,3 +1077,15 @@ from .assets import (
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
     FPackageFileSummary, FObjectExport, FObjectImport,
 )
+from .render_structs import (
+    FSceneNode, FSpanBuffer, FSpan, FRasterPoly,
+    FTransTexture, FScreenBounds, FSurfaceInfo, FSurfaceFacet,
+    FDynamicItem, FDynamicSprite, FBspDrawList, FSavedPoly, ELineFlags,
+)
+from .camera import (
+    ETextOut, EViewportBlitFlags, ERenderType, EViewportCaps,
+    EViewportShowFlags, EMouseButtons,
+    UCanvas, FHitCause, FHitObserver, HHitProxy,
+    UViewport, UClient, URenderBase,
+    MAX_COLOR_BYTES, LODSET_MAX,
+)
