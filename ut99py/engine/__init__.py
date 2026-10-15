@@ -1041,6 +1041,23 @@ class UDownloadNotify:
         pass
 
 
+from .classes import (
+    EngineEventNames,
+    EInputKey, EInputAction, ETravelType, EDodgeDir,
+    ELightEffect, ELightType, EMusicTransition, ESoundSlot,
+    ERenderStyle, EDrawType, ENetRole, EPhysics,
+    EIntelligence, EAttitude, ECsgOper, EBumpType,
+    EMoverGlideType, EMoverEncroachType, ENetMode,
+    ELevelAction,
+    AActor_eventSpawn_Parms, AActor_eventDestroy_Parms,
+    AActor_eventGainedChild_Parms, AActor_eventLostChild_Parms,
+    AActor_eventTrigger_Parms, AActor_eventUnTrigger_Parms,
+    AActor_eventTimer_Parms, AActor_eventHitWall_Parms,
+    AActor_eventFalling_Parms, AActor_eventLanded_Parms,
+    AActor_eventZoneChange_Parms, AActor_eventTouch_Parms,
+    AActor_eventUnTouch_Parms, AActor_eventBump_Parms,
+    AActor_eventBaseChange_Parms, AActor_eventAttach_Parms,
+)
 from .assets import (
     AssetLoader, GAssetLoader,
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,

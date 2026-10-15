@@ -2,6 +2,17 @@
 
 import sys
 
+from ut99py import (
+    FVector, FRotator, FTime, FName, FString,
+    AActor, ULevel, UGameEngine,
+    UNetDriver, UNetConnection, UURL,
+    USound, UAudioSubsystem,
+    URenderDevice, UOpenGLRenderDevice,
+    FSceneNode, UTexture, UMesh,
+    UViewport, UClient, UInput, UConsole,
+    UCCMain, UCommandlet, FScriptCompiler,
+    create_renderer, FOpenGLRenderer, VulkanRenderer,
+)
 
 def main():
     print("============================================================")
@@ -10,20 +21,16 @@ def main():
     print()
     print(f"Version: 0.0.3")
     print()
-    print("Initializing Engine Components:")
-    print("------------------------------------------------------------")
 
-    from ut99py import (
-        FVector, FRotator, FTime, FName, FString,
-        AActor, ULevel, UGameEngine,
-        UNetDriver, UNetConnection, UURL,
-        USound, UAudioSubsystem,
-        URenderDevice, UOpenGLRenderDevice,
-        FSceneNode, UTexture, UMesh,
-        UViewport, UClient, UInput, UConsole,
-        UCCMain, UCommandlet, FScriptCompiler,
-        create_renderer, FOpenGLRenderer, VulkanRenderer,
-    )
+    # Initialize Qt application first
+    from PyQt5.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from ut99py.graphics.window_qt import GameWindow
+    window = GameWindow(800, 600)
+    window.show()
+
+    print("Initializing Engine Components:")
 
     print("  [CORE] Core types and objects...")
     v = FVector(100, 200, 300)
@@ -45,15 +52,18 @@ def main():
     level._url._port = 7777
     print(f"    - Level URL: {level._url}")
     print(f"    - Actors: 3")
-    
+
     actor1 = AActor()
     actor1.location = FVector(0, 0, 100)
+    actor1._name = "Actor1"
     actor2 = AActor()
     actor2.location = FVector(500, 500, 50)
+    actor2._name = "Actor2"
     actor3 = AActor()
     actor3.location = FVector(1000, -500, 0)
+    actor3._name = "Actor3"
     level._actors.extend([actor1, actor2, actor3])
-    
+
     for a in level._actors:
         print(f"      * {a._name} at {a.location}")
 
@@ -68,29 +78,8 @@ def main():
     print(f"    - Sound: {sound._duration}s @ {sound._sample_rate}Hz")
 
     print("  [GFX] Rendering...")
-    try:
-        renderer = create_renderer("opengl", 800, 600)
-        if renderer.init():
-            print(f"    - Device: OpenGL (FOpenGLRenderer)")
-            print(f"    - Resolution: {renderer.get_width()}x{renderer.get_height()}")
-            print(f"    - Initialized: {renderer.is_initialized()}")
-            if hasattr(renderer, 'draw_cube'):
-                print("    - Primitives: cube, sphere, line, triangle, quad")
-            renderer.shutdown()
-        else:
-            print("    - Device: OpenGL (FOpenGLRenderer)")
-            print("    - Status: No OpenGL context available")
-    except Exception as e:
-        print(f"    - Device: OpenGL (FOpenGLRenderer)")
-        print(f"    - Status: {e}")
-
-    device = UOpenGLRenderDevice()
-    scene = FSceneNode()
-    print(f"    - Scene: {scene._x}x{scene._y}")
-    tex = UTexture()
-    print(f"    - Texture: {tex._u_clamp}x{tex._v_clamp}")
-    mesh = UMesh()
-    print(f"    - Mesh: loaded")
+    # The OpenGL renderer is already embedded in the GameWindow
+    print("    - Device: OpenGL (embedded in window)")
 
     print("  [WINDOW] Viewport...")
     viewport = UViewport()
@@ -108,7 +97,7 @@ def main():
 
     print()
     print("============================================================")
-    print("ALL SYSTEMS OPERATIONAL")
+    print("ALL SYSTEMS OPERATIONAL - Graphics window should be visible")
     print("============================================================")
     print()
     print("Ut99py is running! The Unreal Tournament engine has been")
@@ -127,13 +116,13 @@ def main():
     print("  - VulkanRenderer: Vulkan GPU rendering (experimental)")
     print("  - create_renderer('opengl'/'vulkan'): Factory function")
     print()
-    print("To use OpenGL rendering:")
-    print("  from ut99py import create_renderer")
-    print("  renderer = create_renderer('opengl', 800, 600)")
-    print("  renderer.init()")
-    print("  renderer.begin_scene()")
-    print("  renderer.draw_cube(0, 0, -5, 2.0)")
-    print("  renderer.end_scene()")
+    print("Graphics rendering is happening in the visible window above.")
+    print("The engine renders a rotating cube, green line, and blue sphere.")
+    print()
+
+    # Start the Qt event loop - this blocks and keeps the window alive
+    # We use app.exec_() which will run until the window is closed
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
