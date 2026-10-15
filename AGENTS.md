@@ -3,6 +3,7 @@
 Python port of Unreal Tournament 99. Reference C++ source is `~/code/Ut99PubSrc`
 (read-only). Each Python module mirrors a C++ header/lib; name the source file it
 ports in the module docstring.
+Also game data is in `~/Games/UnrealTournament/`.
 
 ## Hard Rules
 
