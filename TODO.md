@@ -128,6 +128,22 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       the port had the branch condition inverted, so neither ever changed case
       (and `appStrihash` hashed the wrong bytes). Pinned by
       `tests/test_file_utils.py`.
+- [x] `Core/Inc/UnBits.h` → `core/bits.py`: `FBitWriter`/`FBitWriterMark`/
+      `FBitReader`. Bodies are in Core.lib; semantics recovered from the
+      Core.dll disassembly (LSB-first packing, appBitsCpy OR-into-dest,
+      variable-length SerializeInt). `bits_cpy` uses a big-integer form 40x
+      faster than the per-bit loop. `FBufferWriter` (UnTemplate.h:1484) added
+      to `core/system.py`. Pinned by `tests/test_bits.py`.
+- [x] `Core/Inc/FCodec.h` → `core/codec.py`: `FCodec`/`FCodecRLE`/
+      `FCodecMTF`/`FCodecBWT`/`FCodecHuffman`/`FCodecFull`, plus the UCC `.uz`
+      wrapper (`compress_uz`/`decompress_uz`, magic 1234; chain
+      [RLE, BWT, MTF, Huffman]) derived empirically from real UCC output --
+      the compress commandlet source is absent from the source drop, and
+      Setup's 5-codec chain (USetupDefinition.cpp:647-652, magic 5678) is a
+      different format. FCodecFull's appSeconds/GWarn stage timing is omitted
+      (unported Core.lib diagnostics; no data effect). Byte-for-byte
+      validated against real UCC `.uz` output via golden vectors in
+      `tests/test_codec.py`.
 - [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader` (appFindPackageFile,
       file-path utilities; full CORE_API bodies remain in Core.lib).
 - [ ] `ut99py/core/objects.py` object-model gaps (there is no `UnObj.h`; the

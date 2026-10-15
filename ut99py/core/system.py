@@ -446,6 +446,35 @@ class FArchiveMemoryReader(FArchive):
         return self._pos >= self._size
 
 
+class FBufferWriter(FArchive):
+    """Buffer writer (UnTemplate.h:1484-1518); the C++ body is inline in the
+    header. Wraps a caller-owned bytearray like the C++ wraps a TArray<BYTE>&,
+    growing it and writing at Pos. Deviation: C++ resizes via TArray::Add;
+    Python extends the bytearray to the write end, same net effect."""
+    def __init__(self, data: bytearray):
+        super().__init__()
+        self._saving = True
+        self._bytes = data
+        self._pos = 0
+    
+    def write(self, data: bytes) -> int:
+        end = self._pos + len(data)
+        if end > len(self._bytes):
+            self._bytes.extend(b'\x00' * (end - len(self._bytes)))
+        self._bytes[self._pos:end] = data
+        self._pos = end
+        return len(data)
+    
+    def tell(self) -> int:
+        return self._pos
+    
+    def seek(self, pos: int) -> None:
+        self._pos = pos
+    
+    def total_size(self) -> int:
+        return len(self._bytes)
+
+
 class FArchiveFileWriter(FArchive):
     def __init__(self, filename: str):
         super().__init__()
