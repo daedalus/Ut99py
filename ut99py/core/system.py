@@ -4,15 +4,41 @@ from typing import TYPE_CHECKING, Iterator, Optional, Any
 import io
 import re
 import struct
+import sys
 
-from .types import FName, FString, TArray, FGuid, FCompactIndex, INDEX_NONE, ENAME_Log, ENAME_Exit
+from .types import (
+    FName,
+    FString,
+    TArray,
+    FGuid,
+    FCompactIndex,
+    INDEX_NONE,
+    ENAME_Log,
+    ENAME_Exit,
+    ENAME_Warning,
+    ENAME_Error,
+    ENAME_Title,
+    ENAME_Heading,
+    ENAME_SubHeading,
+    ENAME_ExecWarning,
+    ENAME_ScriptWarning,
+    ENAME_Progress,
+)
 from .file_utils import appToUpper
 from .objver import (
     ENGINE_NEGOTIATION_VERSION,
     PACKAGE_FILE_VERSION,
     PACKAGE_FILE_VERSION_LICENSEE,
 )
-from .objects import UObject, UClass, UPackage, ULinkerLoad, FOutputDevice
+from .objects import (
+    UObject,
+    UClass,
+    UPackage,
+    ULinkerLoad,
+    FOutputDevice,
+    FContextSupplier,
+    FFeedbackContext,
+)
 
 if TYPE_CHECKING:
     from .types import FVector, FRotator
@@ -553,6 +579,90 @@ class FOutputDeviceFile(FOutputDevice):
     
     def shutdown(self) -> None:
         self._file.close()
+
+
+_WARNING_EVENTS = frozenset(
+    (ENAME_Warning, ENAME_Error, ENAME_ExecWarning, ENAME_ScriptWarning)
+)
+
+
+class FFeedbackContextAnsi(FFeedbackContext):
+    """Unreal Ansi user interface interaction (Core/Inc/FFeedbackContextAnsi.h).
+    
+    Deviations: appSprintf/GET_VARARGS become Python % formatting and *args;
+    LocalPrint writes to stdout and C++'s fflush(stdout) becomes flush=True.
+    YesNof reads the appCmdLine "Silent" switch (unported) from the `silent`
+    ctor flag instead.
+    """
+    
+    def __init__(self, silent: bool = False):
+        self.slow_task_count = 0
+        self.warning_count = 0
+        self.context: Optional[FContextSupplier] = None
+        self.aux_out: Optional[FOutputDevice] = None
+        self.silent = silent
+    
+    def local_print(self, s: str) -> None:
+        # FFeedbackContextAnsi.h:26-33 LocalPrint.
+        print(s, end='', flush=True)
+    
+    def serialize(self, v: str, event: FName = ENAME_Log) -> None:
+        # FFeedbackContextAnsi.h:42-86. The guard/unguard scaffolding is
+        # dropped; the Event chain and re-Serialize formats are verbatim.
+        if event == ENAME_Title:
+            return
+        if event == ENAME_Heading:
+            v = f'--------------------{v}--------------------'
+        elif event == ENAME_SubHeading:
+            v = f'{v}...'
+        elif event in _WARNING_EVENTS:
+            # Context is prefixed only when a supplier is installed.
+            if self.context:
+                v = f'{self.context.get_context()} : {event}, {v}'
+            self.warning_count += 1
+        elif event == ENAME_Progress:
+            self.local_print(v)
+            self.local_print('\r')
+            return
+        self.local_print(v)
+        self.local_print('\n')
+        if GLog is not self:
+            GLog.serialize(v, event)
+        if self.aux_out:
+            self.aux_out.serialize(v, event)
+    
+    def yes_nof(self, fmt: str, *args) -> bool:
+        # FFeedbackContextAnsi.h:87-101.
+        temp_str = fmt % args
+        if (GIsClient or GIsEditor) and not self.silent:
+            self.local_print(temp_str)
+            self.local_print(' (Y/N): ')
+            ch = sys.stdin.read(1)
+            return ch in ('Y', 'y')
+        return True
+    
+    def begin_slow_task(self, task: str, status_window: bool, cancelable: bool) -> None:
+        # FFeedbackContextAnsi.h:102-107; only the count matters.
+        global GIsSlowTask
+        self.slow_task_count += 1
+        GIsSlowTask = self.slow_task_count > 0
+    
+    def end_slow_task(self) -> None:
+        # FFeedbackContextAnsi.h:108-114: check(SlowTaskCount>0).
+        global GIsSlowTask
+        if self.slow_task_count <= 0:
+            raise ValueError('FFeedbackContextAnsi: EndSlowTask without BeginSlowTask')
+        self.slow_task_count -= 1
+        GIsSlowTask = self.slow_task_count > 0
+    
+    def status_updatef(self, numerator: int, denominator: int, fmt: str, *args) -> bool:
+        # FFeedbackContextAnsi.h:115-126. GET_VARARGS builds TempStr, but the
+        # only consumer is the stripped //!! body, so it is not formatted.
+        return True
+    
+    def set_context(self, supplier: Optional[FContextSupplier]) -> None:
+        # FFeedbackContextAnsi.h:127-132.
+        self.context = supplier
 
 
 class FMalloc:
@@ -1231,3 +1341,8 @@ class FObj:
 GNull = FOutputDeviceNull()
 GLog = FOutputDeviceStdout()
 GError = FOutputDevice()
+# Core globals (Core.h:366-372); set by engine startup, which is unported, so
+# the false defaults keep this build headless.
+GIsEditor = False
+GIsClient = False
+GIsSlowTask = False

@@ -144,6 +144,32 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       (unported Core.lib diagnostics; no data effect). Byte-for-byte
       validated against real UCC `.uz` output via golden vectors in
       `tests/test_codec.py`.
+- [x] `Core/Inc/FMallocAnsi.h` → `core/system.py` (replacing the initial
+      commit's stub, which called `ctypes.windll.kernel32.LocalAlloc` -- that is
+      `FMallocWindows` behaviour, and it returned `0` on a non-Windows host):
+      `FMalloc` base per `Core.h:210-219` (all pure virtual; the stub's
+      non-C++ `get_size`/`get_physical_size` are gone), and `FMallocAnsi` over
+      the process C library with pointer-width retypes (`c_int` truncates the
+      address to 32 bits and segfaults on use). `check(Size>0)` raises
+      `ValueError`; a failed `malloc` raises `MemoryError`; `Realloc`'s result
+      is unchecked in the C++ too, so NULL propagates as `0`. `DumpAllocs`'s
+      `debugf(NAME_Exit, ...)` goes to `GLog` (`debugf` unported); `HeapCheck`
+      is a no-op (its C++ body is `#if _MSC_VER` only); `Init`/`Exit` are no-ops
+      in the C++ too. Pinned by `tests/test_alloc.py`.
+- [x] `Core/Inc/FFeedbackContextAnsi.h` → `core/system.py`:
+      `FFeedbackContextAnsi` (`Serialize`'s Event chain -- Title suppressed,
+      Heading/SubHeading rewrites, warning count plus `Context` prefix,
+      Progress's `\r` with no forwarding, else LocalPrint + `GLog`/`AuxOut`
+      copies; `YesNof`; `BeginSlowTask`/`EndSlowTask` with
+      `check(SlowTaskCount>0)`; `StatusUpdatef`; `SetContext`), plus the
+      `FFeedbackContext` abstract (`Core.h:271-280`) and `FContextSupplier`
+      (`Core.h:264-269`) interfaces in `core/objects.py` -- the stub base carried
+      unrelated `status_update`/`progress_*` methods with no C++ counterpart.
+      Deviations: `appSprintf`/`GET_VARARGS` become `%`/`*args`; the unported
+      `ParseParam(appCmdLine(),"Silent")` test becomes the `silent` ctor flag;
+      the unported `GIsEditor`/`GIsClient`/`GIsSlowTask` globals
+      (`Core.h:366-372`) default false (headless). Pinned by
+      `tests/test_feedback.py`.
 - [ ] `Core/Inc/UnFile.h` → file manager / `FArchiveFileReader` (appFindPackageFile,
       file-path utilities; full CORE_API bodies remain in Core.lib).
 - [ ] `ut99py/core/objects.py` object-model gaps (there is no `UnObj.h`; the
@@ -243,3 +269,16 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - `FConfigFile.Read` drops the degenerate single-`"` value case the C++ handles
   by writing past the buffer (`FConfigCacheIni.h:60`): a value that is exactly
   one `"` is kept verbatim instead of becoming empty.
+- `core/system.py` `FOutputDeviceFile` is still the initial stub (eager `open`
+  from an explicit filename, no Event routing). `FOutputDeviceFile.h` lazily
+  makes the log from `appBaseDir`/`appCmdLine`'s `LOG=`/`ABSLOG=`/`appPackage`,
+  suppresses `NAME_Title`, and needs the unported `appTimestamp`/
+  `GFileManager.CreateFileWriter`/`GLogHook`/`GIsCriticalError`. Nothing
+  constructs it yet, so it waits for `UnFile.h`.
+- `core/system.py` `FMemCache` is an initial-commit hit/miss counter, not
+  `UnCache.h`'s `FMemCache`; the real class is mostly `Core.lib` bodies
+  (`Init`/`Create`/`Tick`/`FlushItem`), leaving only the accessors portable.
+- `Core/Inc/UnMsg.h` (Win32 editor `WM_USER` message ids) is not ported: no
+  Python consumer and no headless meaning.
+- `Core/Inc/UnCorObj.h`: `ULanguage` is still missing and `UTextBuffer`'s
+  ctor/`Serialize` bodies are in `Core.lib`.

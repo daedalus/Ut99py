@@ -788,21 +788,34 @@ class FOutputDevice:
         return False
 
 
+class FContextSupplier:
+    """Interface for returning a context string (Core.h:264-269)."""
+    
+    def get_context(self) -> str:
+        raise NotImplementedError
+
+
 class FFeedbackContext(FOutputDevice):
-    def __init__(self):
-        self._map: bool = True
+    """A context for displaying modal warning messages (Core.h:271-280).
     
-    def status_update(self, current: int, max: int, label: str = "") -> None:
-        pass
+    All five methods are pure virtual in C++; raising keeps an unimplemented
+    feedback path from silently swallowing messages.
+    """
     
-    def progress_start(self, max: int, label: str = "") -> None:
-        pass
+    def yes_nof(self, fmt: str, *args) -> bool:
+        raise NotImplementedError
     
-    def progress_update(self, current: int = 0) -> None:
-        pass
+    def begin_slow_task(self, task: str, status_window: bool, cancelable: bool) -> None:
+        raise NotImplementedError
     
-    def progress_end(self) -> None:
-        pass
+    def end_slow_task(self) -> None:
+        raise NotImplementedError
+    
+    def status_updatef(self, numerator: int, denominator: int, fmt: str, *args) -> bool:
+        raise NotImplementedError
+    
+    def set_context(self, supplier: 'FContextSupplier') -> None:
+        raise NotImplementedError
 
 
 def app_error(text: str) -> None:

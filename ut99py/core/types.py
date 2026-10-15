@@ -236,6 +236,12 @@ ENAME_Event = FName("Event")
 ENAME_Warning = FName("Warning")
 ENAME_Error = FName("Error")
 ENAME_Exit = FName("Exit")
+ENAME_Title = FName("Title")
+ENAME_Heading = FName("Heading")
+ENAME_SubHeading = FName("SubHeading")
+ENAME_ExecWarning = FName("ExecWarning")
+ENAME_ScriptWarning = FName("ScriptWarning")
+ENAME_Progress = FName("Progress")
 
 
 class FString(str):
