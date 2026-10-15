@@ -1280,18 +1280,6 @@ class FMemStack:
         pass
 
 
-class FMemCache:
-    def __init__(self):
-        self._hit = 0
-        self._miss = 0
-    
-    def get_hit_count(self) -> int:
-        return self._hit
-    
-    def get_miss_count(self) -> int:
-        return self._miss
-
-
 class FExec:
     def exec_commands(self, cmd: str) -> bool:
         return False
@@ -1302,6 +1290,7 @@ class FCallbackParams:
         self._depth = 0
 
 
+from .cache_items import FCacheItem, FMemCache
 from .objects import FOutputDevice
 
 
