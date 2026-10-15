@@ -1,10 +1,11 @@
 """Qt-based OpenGL window for Ut99py - provides a real on-screen display.
 
-Uses PyQt5's QOpenGLWidget to wrap the FOpenGLRenderer so the demo
+Uses PyQt5's QGLWidget to wrap the FOpenGLRenderer so the demo
 can actually render to a visible window instead of being headless.
 """
-
 from typing import Optional
+
+import math
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSizePolicy,
@@ -53,27 +54,107 @@ class GLWidget(QGLWidget):
             if self._cube_angle >= 360.0:
                 self._cube_angle -= 360.0
 
-            # Draw a rotating cube
+            # Draw a rotating red cube (larger, closer)
             self._renderer.set_color(1.0, 0.0, 0.0)
             self._renderer.load_identity()
-            self._renderer.translate(0.0, 0.0, -6.0)
+            self._renderer.translate(0.0, 0.0, -8.0)
             self._renderer.rotate(self._cube_angle, 0.0, 1.0, 0.0)
-            self._renderer.draw_cube(0.0, 0.0, 0.0, 2.0)
+            self._renderer.draw_cube(0.0, 0.0, 0.0, 4.0)
 
-            # Draw a green line
+            # Draw a green line across the scene
             self._renderer.set_color(0.0, 1.0, 0.0)
             self._renderer.load_identity()
-            self._renderer.draw_line(-2.0, 0.0, -5.0, 2.0, 0.0, -5.0)
+            self._renderer.translate(0.0, 0.0, -7.0)
+            self._renderer.draw_line(-3.0, 0.0, 0.0, 3.0, 0.0, 0.0)
 
-            # Draw a blue sphere
+            # Draw a blue sphere (closer, in front of cube)
             self._renderer.set_color(0.0, 0.5, 1.0)
             self._renderer.load_identity()
-            self._renderer.translate(2.0, 0.0, -5.0)
+            self._renderer.translate(0.0, 0.0, -6.0)
+            self._renderer.draw_sphere(0.0, 0.0, 0.0, 1.5, 24)
+
+            # Draw a yellow pyramid for extra visual interest
+            self._renderer.set_color(1.0, 1.0, 0.0)
+            self._renderer.load_identity()
+            self._renderer.translate(0.0, 0.0, -5.0)
+            self._renderer.rotate(45.0, 1.0, 0.0, 0.0)
+            self._draw_pyramid(self._renderer, 1.0)
+
+            # Draw a magenta cylinder
+            self._renderer.set_color(1.0, 0.0, 1.0)
+            self._renderer.load_identity()
+            self._renderer.translate(-2.0, 0.0, -4.0)
+            self._renderer.rotate(45.0, 0.0, 1.0, 0.0)
+            self._draw_cylinder(self._renderer, 0.8, 1.5)
+
+            # Draw a white teapot-like shape (just a sphere with facets)
+            self._renderer.set_color(1.0, 1.0, 1.0)
+            self._renderer.load_identity()
+            self._renderer.translate(2.0, 0.0, -4.0)
+            self._renderer.rotate(self._cube_angle * 0.5, 0.0, 1.0, 0.0)
             self._renderer.draw_sphere(0.0, 0.0, 0.0, 1.0, 16)
 
             self._renderer.end_scene()
 
             self._frame_count += 1
+
+    def _draw_pyramid(self, renderer, size: float) -> None:
+        """Draw a simple square pyramid."""
+        s = size / 2.0
+        h = size * 0.8
+
+        # Base (square)
+        renderer.draw_quad([
+            (-s, -s, s), (s, -s, s), (s, -s, -s), (-s, -s, -s)
+        ])
+
+        # Sides
+        renderer.draw_quad([
+            (-s, -s, s), (s, -s, s), (0, h, 0), (-s, -s, s)
+        ])
+        renderer.draw_quad([
+            (s, -s, s), (s, -s, -s), (0, h, 0), (s, -s, -s)
+        ])
+        renderer.draw_quad([
+            (s, -s, -s), (-s, -s, -s), (0, h, 0), (s, -s, -s)
+        ])
+        renderer.draw_quad([
+            (-s, -s, -s), (-s, -s, s), (0, h, 0), (-s, -s, s)
+        ])
+
+    def _draw_cylinder(self, renderer, radius: float, height: float) -> None:
+        """Draw a simple cylinder using quads and circles."""
+        segments = 16
+
+        # Top circle
+        renderer.draw_quad([(radius * math.cos(i * 2 * math.pi / segments),
+                             radius * math.sin(i * 2 * math.pi / segments),
+                             height / 2)
+                           for i in range(segments)])
+
+        # Bottom circle (at -height/2)
+        renderer.draw_quad([(radius * math.cos(i * 2 * math.pi / segments),
+                             radius * math.sin(i * 2 * math.pi / segments),
+                             -height / 2)
+                          for i in range(segments)])
+
+        # Side quads
+        for i in range(segments):
+            j = (i + 1) % segments
+            renderer.draw_quad([
+                (radius * math.cos(i * 2 * math.pi / segments),
+                 radius * math.sin(i * 2 * math.pi / segments),
+                 height / 2),
+                (radius * math.cos(j * 2 * math.pi / segments),
+                 radius * math.sin(j * 2 * math.pi / segments),
+                 height / 2),
+                (radius * math.cos(j * 2 * math.pi / segments),
+                 radius * math.sin(j * 2 * math.pi / segments),
+                 -height / 2),
+                (radius * math.cos(i * 2 * math.pi / segments),
+                 radius * math.sin(i * 2 * math.pi / segments),
+                 -height / 2),
+            ])
 
 
 class GameWindow(QMainWindow):
@@ -131,4 +212,5 @@ def run_game(width: int = 800, height: int = 600) -> int:
 
 if __name__ == "__main__":
     import sys
+    import math
     sys.exit(run_game())

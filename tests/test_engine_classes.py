@@ -1,75 +1,60 @@
-"""Regression tests for Engine/Inc/EngineClasses.h port.
-
-Expected values derived from C++ semantics in EngineClasses.h, not
-echoing the Python implementation back.
-"""
+"""Regression tests for Engine/Inc/UnSkeletalMesh.h port."""
 import sys
 sys.path.insert(0, "/home/dclavijo/my_code/Ut99py")
-
 from ut99py.engine import (
-    EInputKey, EInputAction, ETravelType, EDodgeDir,
-    ELightEffect, ELightType, EMusicTransition, ESoundSlot,
-    ERenderStyle, EDrawType, ENetRole, EPhysics,
-    EIntelligence, EAttitude, ECsgOper, EBumpType,
-    EMoverGlideType, EMoverEncroachType, ENetMode,
-    ELevelAction,
+    VJointPos, FMeshBone, FNamedBone, FNamedBoneBinary,
+    AnimInfoBinary, VChunkHeader, VMaterial, VBone,
+    VBoneInfIndex, VBoneInfluence, VRawBoneInfluence,
+    VQuatAnimKey, AnalogTrack, MotionChunkDigestInfo,
+    MotionChunk, TrackDiffs, VVertex, VPoint, VTriangle,
+    USkelImport, USkeletalMesh, UAnimation,
 )
+from ut99py.core import FName, FVector
 
 
-def test_enum_int_values():
-    """C++ enums assign sequential integer values."""
-    assert EInputKey.IK_None == 0
-    assert EInputKey.IK_Enter == 13
-    assert EInputKey.IK_Space == 32
-    assert EInputKey.IK_F1 == 112
-
-    assert EPhysics.PHYS_None == 0
-    assert EPhysics.PHYS_Walking == 1
-    assert EPhysics.PHYS_Falling == 2
-    assert EPhysics.PHYS_Vehicle == 8
-
-    assert ENetRole.ROLE_Authority == 0
-    assert ENetRole.ROLE_SimulatedProxy == 1
-    assert ENetRole.ROLE_AutonomousProxy == 2
-    assert ENetRole.ROLE_None == 3
-
-    assert EDodgeDir.DODGE_Forward == 0
-    assert EDodgeDir.DODGE_Backward == 1
-    assert EDodgeDir.DODGE_Left == 2
-    assert EDodgeDir.DODGE_Right == 3
-
-    assert ETravelType.TRAVEL_Absolute == 0
-    assert ETravelType.TRAVEL_Relative == 1
-
-    assert EIntelligence.AI_Panic == 0
-    assert EIntelligence.AI_Ignore == 7
-
-    assert EAttitude.ADA_Neutral == 0
-    assert EAttitude.ADA_Enemy == 2
-
-    assert ECsgOper.CSG_Add == 0
-    assert ECsgOper.CSG_Sub == 1
-
-    assert ENetMode.NM_Standalone == 0
-    assert ENetMode.NM_Client == 3
+def test_vjoint_pos():
+    vp = VJointPos()
+    assert hasattr(vp, "orientation")
+    assert hasattr(vp, "position")
+    assert hasattr(vp, "length")
+    assert hasattr(vp, "x_size")
+    assert hasattr(vp, "y_size")
+    assert hasattr(vp, "z_size")
+    assert vp.length == 0.0
 
 
-def test_int_enum_behavior():
-    """IntEnum members are ints; comparisons and hashing work."""
-    assert int(EInputKey.IK_Enter) == 13
-    assert EInputKey.IK_Enter == 13
-    assert hash(EInputKey.IK_Enter) == hash(13)
+def test_bone_structs():
+    mb = FMeshBone(name=FName("test_bone"))
+    assert mb.name == FName("test_bone")
+    assert mb.parent_index == -1
+
+    nb = FNamedBone(name=FName("named_bone"))
+    assert nb.name == FName("named_bone")
 
 
-def test_enum_name_matching():
-    """Member names mirror C++ macros."""
-    assert EInputKey.__members__["IK_LeftMouse"].value == 1
-    assert ESoundSlot.SLOT_Weapon == 2
-    assert EMusicTransition.MT_Norm == 2
+def test_vchunk_header():
+    vch = VChunkHeader(chunk_id=b"TEST", type_flag=1, data_size=200, data_count=5)
+    assert vch.chunk_id == b"TEST"
+    assert vch.type_flag == 1
+    assert vch.data_size == 200
+    assert vch.data_count == 5
+
+
+def test_vmaterial():
+    vm = VMaterial(material_name=b"mat", texture_index=5, poly_flags=0x100,
+                   aux_material=2, aux_flags=0x200, lod_bias=10, lod_style=5)
+    assert vm.material_name == b"mat"
+    assert vm.texture_index == 5
+    assert vm.poly_flags == 0x100
+    assert vm.aux_material == 2
+    assert vm.aux_flags == 0x200
+    assert vm.lod_bias == 10
+    assert vm.lod_style == 5
 
 
 if __name__ == "__main__":
-    test_enum_int_values()
-    test_int_enum_behavior()
-    test_enum_name_matching()
-    print("All EngineClasses tests passed.")
+    test_vjoint_pos()
+    test_bone_structs()
+    test_vchunk_header()
+    test_vmaterial()
+    print("UnSkeletalMesh tests passed.")

@@ -1064,6 +1064,14 @@ from .un_obj import (
     FShadowMask, FLightMapIndex, ESplitType, FPoly,
     UPolys, FVert, FDecal,
 )
+from .skeletal_mesh import (
+    VJointPos, FMeshBone, FNamedBone, FNamedBoneBinary,
+    AnimInfoBinary, VChunkHeader, VMaterial, VBone,
+    VBoneInfIndex, VBoneInfluence, VRawBoneInfluence,
+    VQuatAnimKey, AnalogTrack, MotionChunkDigestInfo,
+    MotionChunk, TrackDiffs, VVertex, VPoint, VTriangle,
+    USkelImport, USkeletalMesh, UAnimation,
+)
 from .assets import (
     AssetLoader, GAssetLoader,
     UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
