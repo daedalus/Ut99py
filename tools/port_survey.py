@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PY_DIR = REPO_ROOT / "ut99py"
+PY_DIR = Path(__file__).resolve().parent.parent / "ut99py"
 DEFAULT_CPP_DIR = Path(os.path.expanduser("~/code/Ut99PubSrc"))
 
 # Headers a Python module may cite, e.g. "Port of Core/Inc/UnArc.h".
