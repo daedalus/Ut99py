@@ -12,6 +12,8 @@ Ported from Ut99PubSrc/Engine/
 - UTexture, UMaterial: Texture and material system
 - UMesh, USkeletalMesh: Mesh systems
 - ULevelBase: Base level class
+
+Engine/Inc/UnChan.h: UChannel, UControlChannel, UActorChannel, UFileChannel.
 """
 
 from typing import TYPE_CHECKING, Optional, Any, ClassVar
