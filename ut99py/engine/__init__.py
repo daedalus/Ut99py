@@ -1110,3 +1110,7 @@ from .audio import (
     FRiffWaveHeader, FRiffChunkOld, FFormatChunk, FSampleChunk, FSampleLoop,
     FWaveModInfo,
 )
+from .console import (
+    UConsole,
+    UConsole_eventMessage_Parms, UConsole_eventConnectFailure_Parms,
+)
