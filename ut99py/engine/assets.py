@@ -26,6 +26,7 @@ from ..core import linkers as core_linkers
 from ..core.linkers import FPackageFileSummary, FObjectExport, FObjectImport
 from .texture import UTexture
 from .mesh import UMesh
+from .texload import is_texture_export, load_texture, texture_to_rgba
 from ..audio import USound
 
 SIGNATURE_UT = PACKAGE_FILE_TAG
@@ -280,14 +281,24 @@ class AssetLoader:
             return None
 
         for exp in package._exports:
-            if exp.object_name.name == texture_name:
-                texture = UTexture()
-                texture._name = FName(texture_name)
-                texture._package = package_name
-                self._texture_cache[cache_key] = texture
-                return texture
+            if exp.object_name.name != texture_name:
+                continue
+            if not is_texture_export(package._linker, exp):
+                continue
+            texture = load_texture(package._linker, exp)
+            texture._package = package_name
+            self._texture_cache[cache_key] = texture
+            return texture
 
         return None
+
+    def get_texture_rgba(self, package_name: str, texture_name: str) -> Optional[Any]:
+        """Load texture and decode mip 0 through its palette to (V, U, 4)
+        uint8 RGBA; None for textures without stored pixels."""
+        texture = self.get_texture(package_name, texture_name)
+        if not texture:
+            return None
+        return texture_to_rgba(texture)
 
     def get_sound(self, package_name: str, sound_name: str) -> Optional["USoundAsset"]:
         """Load sound from package"""
