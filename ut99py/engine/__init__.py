@@ -1104,3 +1104,9 @@ from .camera import (
     UViewport, UClient, URenderBase,
     MAX_COLOR_BYTES, LODSET_MAX,
 )
+from .audio import (
+    HAVE_VAG, make_four_cc,
+    UAudioSubsystem, FSoundData, USound, UMusic,
+    FRiffWaveHeader, FRiffChunkOld, FFormatChunk, FSampleChunk, FSampleLoop,
+    FWaveModInfo,
+)

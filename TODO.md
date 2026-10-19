@@ -217,16 +217,33 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - [x] **Reconciliation**: `engine/assets.py` now delegates to `core/linkers.py`
       (`AssetLoader.load_package` wraps a `ULinkerLoad` in `UPackage`); the
       duplicate summary/name/import/export decoders are deleted.
+- [x] `Engine/Inc/UnAudio.h` → `ut99py/engine/audio.py` (10 declared symbols):
+      `UAudioSubsystem` (abstract; pure virtuals raise, `CleanUp` empty inline
+      per UnAudio.h:51), `FSoundData` (`TLazyArray<BYTE>` + `Owner`),
+      `USound` (ctor/`GetDuration` inline, UnAudio.h:88,95; static `Audio`),
+      `UMusic`, the `MAKEFOURCC`/`mmioFOURCC` macro, and `FWaveModInfo` with
+      `FRiffWaveHeader`/`FRiffChunkOld`/`FFormatChunk`/`FSampleChunk`/
+      `FSampleLoop`. The bodies absent from the header (FSoundData
+      `Load`/`GetPeriod`, USound/UMusic `Serialize`/`Destroy`/`PostLoad`,
+      FWaveModInfo readers/reducers/filters) exist only in the prebuilt
+      `Engine.lib` (msvc symbols verified) and raise. Pinned by
+      `tests/test_audio.py`.
 
 ## Engine Subsystems Pending
 - [ ] **Networking**: `UnNet.h`, `UnNetDrv.h`, `UnChan.h`, `UnBunch.h`, `UnConn.h`, `UnDownload.h`, `UnDemoRec.h`.
 - [ ] **Actors & Game Logic**: `AActor.h`, `APawn.h`, `APlayerPawn.h`, `AWeapon.h`, `AInventory.h`, `APickup.h`, `AAmmo.h`, `AMover.h`, `ABrush.h`, `ACarcass.h`, `AZoneInfo.h`, `ALevelInfo.h`, `AGameReplicationInfo.h`, `APlayerReplicationInfo.h`.
 - [ ] **World/Bsp**: `UnLevel.h`, `UnModel.h`, `UnDynBsp.h`, `UnReach.h`, `ULevelSummary.h`.
 - [ ] **Rendering**: `UnRender.h`, `UnRenDev.h`, `Palette.h`, `S3tc.h`.
-- [ ] **Audio**: `Audio/Inc/AudioSubsystem.h`, `UnAudio.h`.
+- [ ] **Audio**: `Audio/Inc/*` (the B audio module: `AudioSubsystem.h`, `AudioMixer.h`, ...).
+      `UnAudio.h` is ported (`ut99py/engine/audio.py`).
 - [ ] **Input & Engine Core**: `UnIn.h`, `UnCamera.h`, `UnEngine.h`, `UnGame.h`, `UnPlayer.h`, `UnURL.h`.
 
 ## Known deviations to reconcile
+- `ut99py/audio/__init__.py` (initial commit) carries its own invented
+  `USound`/`UMusic`/`UAudioSubsystem` that cite no header and differ from the
+  `UnAudio.h` port in `ut99py/engine/audio.py`; `ut99py/__init__.py` and
+  `graphics/` still import the audio-package ones. Reconcile onto
+  `engine/audio.py` like the `assets.py` case.
 - Python `NAME_*` in `core/types.py` are `FName` objects, not the C++ `EName`
   ints. Keep for compatibility; `core/names.py` supplies the numeric enum +
   index→string table the linker needs.
