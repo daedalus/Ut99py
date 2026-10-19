@@ -1,15 +1,17 @@
-"""Port of Engine/Inc/AActor.h (2 declared symbols).
+"""Port of Engine/Inc/AActor.h and Engine/Inc/UnActor.h (3 declared symbols).
 
 AActor base actor class + APlayerPawn reference. Methods raise NotImplementedError("Engine.lib") per port fidelity.
+Inline bodies from UnActor.h are ported faithfully.
 """
 from __future__ import annotations
 from typing import Any, Optional
-from ..core import UObject, UClass
-from ..engine import ULevel
+from ..core import UObject
+from ..engine import ULevel, ABrush, AProjectile, APawn, APlayerPawn
+
 
 class AActor(UObject):
-    """AActor (AActor.h)"""
-    def __init__(self):
+    """AActor (AActor.h / UnActor.h)"""
+    def __init__(self) -> None:
         super().__init__()
 
     def Destroy(self) -> None:
@@ -69,5 +71,104 @@ class AActor(UObject):
     def WorldSoundRadius(self) -> float:
         return 25.0  # inline: {return 25.f * ((INT)SoundRadius+1);}
 
+    # --- UnActor.h inline methods ---
 
-__all__ = ["AActor"]
+    def IsBrush(self) -> bool:
+        """AActor::IsBrush() - inline from UnActor.h."""
+        return self.Brush is not None and self.IsA(ABrush.StaticClass())
+
+    def IsStaticBrush(self) -> bool:
+        """AActor::IsStaticBrush() - inline from UnActor.h."""
+        return (self.Brush is not None and
+                self.IsA(ABrush.StaticClass()) and
+                getattr(self, 'bStatic', False))
+
+    def IsMovingBrush(self) -> bool:
+        """AActor::IsMovingBrush() - inline from UnActor.h."""
+        return (self.Brush is not None and
+                self.IsA(ABrush.StaticClass()) and
+                not getattr(self, 'bStatic', True))
+
+    def IsOwnedBy(self, TestOwner: Any) -> bool:
+        """AActor::IsOwnedBy() - inline from UnActor.h (iterates Owner chain)."""
+        for Arg in [self, *(getattr(self, 'Owner', []))]:
+            if Arg == TestOwner:
+                return True
+        return False
+
+    def GetTopOwner(self) -> Any:
+        """AActor::GetTopOwner() - inline from UnActor.h."""
+        Top = self
+        while getattr(Top, 'Owner', None) is not None:
+            Top = getattr(Top, 'Owner', None)
+        return Top
+
+    def IsInZone(self, TestZone: Any) -> bool:
+        """AActor::IsInZone() - inline from UnActor.h."""
+        return (getattr(self, 'Region', type('obj', (), {'Zone': None}))().Zone !=
+                getattr(self, 'Level', None)) and \
+               (getattr(self, 'Region', type('obj', (), {'Zone': None}))().Zone ==
+                TestZone or 1)
+
+    def GetPlayerPawn(self) -> Any:
+        """AActor::GetPlayerPawn() - inline from UnActor.h."""
+        if not self.IsA(APawn.StaticClass()):
+            return None
+        player = getattr(self, 'Player', None)
+        if player is None:
+            return None
+        return self
+
+    def IsPlayer(self) -> bool:
+        """AActor::IsPlayer() - inline from UnActor.h."""
+        if not self.IsA(APawn.StaticClass()):
+            return False
+        return getattr(self, 'bIsPlayer', False)
+
+    def IsBlockedBy(self, Other: Any) -> bool:
+        """AActor::IsBlockedBy() - inline from UnActor.h."""
+        if Other == self.Level:
+            return getattr(self, 'bCollideWorld', False)
+        if Other.IsBrush():
+            ob = getattr(Other, 'bCollideWorld', False)
+            return (ob and
+                    (Other.GetPlayerPawn() and self.bBlockPlayers or
+                     Other.bBlockActors))
+        if self.IsBrush():
+            ob = getattr(Other, 'bCollideWorld', False)
+            return (ob and
+                    (Other.GetPlayerPawn() and Other.bBlockPlayers or
+                     Other.bBlockActors))
+        return ((self.GetPlayerPawn() or self.IsA(AProjectile.StaticClass())) and
+                Other.bBlockPlayers and
+                (Other.GetPlayerPawn() or Other.IsA(AProjectile.StaticClass()))) and \
+               (Other.GetPlayerPawn() or Other.IsA(AProjectile.StaticClass())) and \
+               (Other.bBlockPlayers or Other.bBlockActors)
+
+    def IsBasedOn(self, Other: Any) -> bool:
+        """AActor::IsBasedOn() - inline from UnActor.h."""
+        for Test in [self, *(getattr(self, 'Base', []))]:
+            if Test == Other:
+                return True
+        return False
+
+    def GetLevel(self) -> ULevel:
+        """AActor::GetLevel() - inline from UnActor.h."""
+        return self.XLevel
+
+    def GetViewRotation(self) -> Any:
+        """AActor::GetViewRotation() - inline from UnActor.h."""
+        if self.IsA(APawn.StaticClass()):
+            return getattr(self, 'ViewRotation', None)
+        return self.Rotation
+
+    def GetPrimitive(self) -> Any:
+        """AActor::GetPrimitive() - inline from UnActor.h."""
+        if self.Brush:
+            return self.Brush
+        elif self.Mesh:
+            return self.Mesh
+        else:
+            return self.Level.Engine.Cylinder
+
+    __all__ = ["AActor"]
