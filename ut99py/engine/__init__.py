@@ -4,7 +4,7 @@ Ported from Ut99PubSrc/Engine/
 - AActor: Base actor class
 - APlayerPawn, APawn: Player and AI pawns
 - AWeapon, AInventory: Weapons and inventory
-- ABrush, AZoneInfo: Brushes and zones  
+- ABrush, AZoneInfo: Brushes and zones
 - UEngine: Main engine
 - ULevel: Level management
 - UNetDriver, UChannel: Networking
@@ -18,10 +18,27 @@ from typing import TYPE_CHECKING, Optional, Any, ClassVar
 from enum import IntEnum
 
 from ..core import (
-    UObject, UClass, UStruct, UFunction, UState, UPackage,
-    FVector, FRotator, FPlane, FQuat, FMatrix, FCoords, FScale, FModelCoords,
-    FName, FString, TArray, TMap,
-    FArchive, FOutputDevice,
+    UObject,
+    UClass,
+    UStruct,
+    UFunction,
+    UState,
+    UPackage,
+    FVector,
+    FRotator,
+    FPlane,
+    FQuat,
+    FMatrix,
+    FCoords,
+    FScale,
+    FModelCoords,
+    FName,
+    FString,
+    TArray,
+    TMap,
+    FArchive,
+    FOutputDevice,
+    FTime,
     GMath,
 )
 
@@ -52,75 +69,77 @@ class EActorFlags(IntEnum):
 
 
 class FActorLink:
-    __slots__ = ('actor', 'next')
-    
-    def __init__(self, actor: Optional['AActor'] = None, next: Optional['FActorLink'] = None):
+    __slots__ = ("actor", "next")
+
+    def __init__(
+        self, actor: Optional["AActor"] = None, next: Optional["FActorLink"] = None
+    ):
         self.actor = actor
         self.next = next
 
 
 class FPointRegion:
-    __slots__ = ('zone', 'i_leaf', 'bbox')
-    
+    __slots__ = ("zone", "i_leaf", "bbox")
+
     def __init__(self):
-        self.zone: Optional['AZoneInfo'] = None
+        self.zone: Optional["AZoneInfo"] = None
         self.i_leaf = 0
         self.bbox = None
 
 
 class AActor(UObject):
     _actor_count: ClassVar[int] = 0
-    
+
     def __init__(self):
         super().__init__()
-        self._level: Optional['ULevel'] = None
+        self._level: Optional["ULevel"] = None
         self._role: FName = FName("ROLE_SimulatedProxy")
         self._remote_role: FName = FName("ROLE_Authority")
-        
+
         self._location = FVector()
         self._rotation = FRotator()
         self._velocity = FVector()
         self._original_location = FVector()
-        
+
         self._owner: Optional[AActor] = None
         self._base: Optional[AActor] = None
         self._attached: Optional[FActorLink] = None
-        
+
         self._event: FName = FName("None")
         self._tag: FName = FName("None")
-        
+
         self._collision_radius = 34.0
         self._collision_height = 88.0
         self._draw_scale = 1.0
         self._pre_pivot = FVector()
-        
+
         self._draw_type = 0
         self._render_density = 1
         self._physics = EPhysics.PHYS_Walking
-        
+
         self._life_span = 0.0
         self._life = 100.0
         self._max_encumbrance = 0
-        
+
         self._sound_radius = 0
         self._sound_volume = 1.0
-        
+
         self._light_type = 0
         self._light_effect = 0
         self._light_brightness = 0
         self._light_hue = 0
         self._light_saturation = 0
-        
-        self._ambient_sound: Optional['USound'] = None
+
+        self._ambient_sound: Optional["USound"] = None
         self._instigator: Optional[AActor] = None
-        
+
         self._region = FPointRegion()
-        
+
         self._x_level = None
         self._level_index = 0
-        
+
         self._latent_function: Optional[UFunction] = None
-        
+
         self._b_hidden = False
         self._b_delete_me = False
         self._b_ticked = False
@@ -129,173 +148,194 @@ class AActor(UObject):
         self._b_collide_actors = True
         self._b_block_actors = True
         self._b_block_players = True
-        
+
         self._volume_radius = 0
-        
+
         self._draw_matrix = None
-        self._skin: Optional['UTexture'] = None
-        self._mesh: Optional['UMesh'] = None
-        self._brush: Optional['ABrush'] = None
-        
+        self._skin: Optional["UTexture"] = None
+        self._mesh: Optional["UMesh"] = None
+        self._brush: Optional["ABrush"] = None
+
         AActor._actor_count += 1
-    
+
     @property
-    def level(self) -> Optional['ULevel']:
+    def level(self) -> Optional["ULevel"]:
         return self._level
-    
+
     @property
     def location(self) -> FVector:
         return self._location
-    
+
     @location.setter
     def location(self, value: FVector) -> None:
         self._location = value
-    
+
     @property
     def rotation(self) -> FRotator:
         return self._rotation
-    
+
     @rotation.setter
     def rotation(self, value: FRotator) -> None:
         self._rotation = value
-    
+
     @property
     def velocity(self) -> FVector:
         return self._velocity
-    
+
     @velocity.setter
     def velocity(self, value: FVector) -> None:
         self._velocity = value
-    
-    def get_level(self) -> Optional['ULevel']:
+
+    def get_level(self) -> Optional["ULevel"]:
         return self._level
-    
-    def get_player_pawn(self) -> Optional['APlayerPawn']:
+
+    def get_player_pawn(self) -> Optional["APlayerPawn"]:
         if isinstance(self, APlayerPawn) and self._player:
             return self
         return None
-    
+
     def is_player(self) -> bool:
         if isinstance(self, APawn):
             return self._b_is_player
         return False
-    
-    def is_owned_by(self, other: 'AActor') -> bool:
+
+    def is_owned_by(self, other: "AActor") -> bool:
         actor = self
         while actor:
             if actor == other:
                 return True
             actor = actor._owner
         return False
-    
-    def get_top_owner(self) -> 'AActor':
+
+    def get_top_owner(self) -> "AActor":
         top = self
         while top._owner:
             top = top._owner
         return top
-    
-    def is_in_zone(self, other: 'AZoneInfo') -> bool:
+
+    def is_in_zone(self, other: "AZoneInfo") -> bool:
         if self._region.zone != self._level:
             return self._region.zone == other
         return True
-    
+
     def get_view_rotation(self) -> FRotator:
         if isinstance(self, APawn):
             return self._view_rotation
         return self._rotation
-    
+
     def is_brush(self) -> bool:
         return self._brush is not None and isinstance(self, ABrush)
-    
+
     def is_static_brush(self) -> bool:
         return self._brush is not None and isinstance(self, ABrush) and self._b_static
-    
+
     def is_moving_brush(self) -> bool:
-        return self._brush is not None and isinstance(self, ABrush) and not self._b_static
-    
-    def set_owner(self, new_owner: Optional['AActor']) -> None:
+        return (
+            self._brush is not None and isinstance(self, ABrush) and not self._b_static
+        )
+
+    def set_owner(self, new_owner: Optional["AActor"]) -> None:
         self._owner = new_owner
-    
-    def set_collision(self, new_collide_actors: bool, new_block_actors: bool, new_block_players: bool = False) -> None:
+
+    def set_collision(
+        self,
+        new_collide_actors: bool,
+        new_block_actors: bool,
+        new_block_players: bool = False,
+    ) -> None:
         self._b_collide_actors = new_collide_actors
         self._b_block_actors = new_block_actors
         self._b_block_players = new_block_players
-    
+
     def set_collision_size(self, new_radius: float, new_height: float) -> None:
         self._collision_radius = new_radius
         self._collision_height = new_height
-    
-    def set_base(self, new_base: Optional['AActor'], notify: bool = True) -> None:
+
+    def set_base(self, new_base: Optional["AActor"], notify: bool = True) -> None:
         self._base = new_base
-    
+
     def set_location(self, new_location: FVector) -> bool:
         self._location = new_location
         return True
-    
+
     def set_rotation(self, new_rotation: FRotator) -> bool:
         self._rotation = new_rotation
         return True
-    
+
     def get_cylinder_extent(self) -> FVector:
-        return FVector(self._collision_radius, self._collision_radius, self._collision_height)
-    
+        return FVector(
+            self._collision_radius, self._collision_radius, self._collision_height
+        )
+
     def world_sound_radius(self) -> float:
         return 25.0 * (self._sound_radius + 1)
-    
+
     def world_volumetric_radius(self) -> float:
         return 25.0 * (self._volume_radius + 1)
-    
-    def is_blocked_by(self, other: 'AActor') -> bool:
+
+    def is_blocked_by(self, other: "AActor") -> bool:
         if other == self._level:
             return self._b_collide_world
         elif other.is_brush():
-            return self._b_collide_world and (self.get_player_pawn() if other._b_block_players else other._b_block_actors)
+            return self._b_collide_world and (
+                self.get_player_pawn()
+                if other._b_block_players
+                else other._b_block_actors
+            )
         elif self.is_brush():
-            return other._b_collide_world and (self._b_block_players if other.get_player_pawn() else self._b_block_actors)
+            return other._b_collide_world and (
+                self._b_block_players
+                if other.get_player_pawn()
+                else self._b_block_actors
+            )
         else:
-            return (self.get_player_pawn() or isinstance(self, AProjectile)) and other._b_block_players and \
-                   (other.get_player_pawn() or isinstance(self, AProjectile)) and self._b_block_players
-    
-    def is_based_on(self, other: 'AActor') -> bool:
+            return (
+                (self.get_player_pawn() or isinstance(self, AProjectile))
+                and other._b_block_players
+                and (other.get_player_pawn() or isinstance(self, AProjectile))
+                and self._b_block_players
+            )
+
+    def is_based_on(self, other: "AActor") -> bool:
         test = self
         while test:
             if test == other:
                 return True
             test = test._base
         return False
-    
+
     def tick(self, delta_time: float, tick_type: int) -> bool:
         return True
-    
+
     def destroy(self) -> None:
         self._b_delete_me = True
         AActor._actor_count -= 1
-    
+
     def is_pending_kill(self) -> bool:
         return self._b_delete_me
-    
+
     def process_state(self, delta_seconds: float) -> None:
         pass
-    
+
     def process_event(self, function: UFunction, parms: dict = None) -> None:
         pass
-    
-    def get_primitive(self) -> Optional['UPrimitive']:
+
+    def get_primitive(self) -> Optional["UPrimitive"]:
         if self._brush:
             return self._brush
         if self._mesh:
             return self._mesh
         return None
-    
-    def get_skin(self, index: int = 0) -> Optional['UTexture']:
+
+    def get_skin(self, index: int = 0) -> Optional["UTexture"]:
         return self._skin
-    
-    def to_local(self) -> 'FCoords':
+
+    def to_local(self) -> "FCoords":
         return FCoords()
-    
-    def to_world(self) -> 'FCoords':
+
+    def to_world(self) -> "FCoords":
         return FCoords()
-    
+
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.get_full_name()} at {self._location}>"
 
@@ -303,8 +343,8 @@ class AActor(UObject):
 class ABrush(AActor):
     def __init__(self):
         super().__init__()
-        self._brush: Optional['UModel'] = None
-        self._poly_list: TArray['UPolys'] = TArray()
+        self._brush: Optional["UModel"] = None
+        self._poly_list: TArray["UPolys"] = TArray()
         self._b_static = False
         self._b_semisolid = False
         self._b_not_visible = False
@@ -317,16 +357,16 @@ class AZoneInfo(AActor):
         super().__init__()
         self._zone_priority = 0
         self._max_purchase = 0
-        self._ambient_sound: Optional['USound'] = None
+        self._ambient_sound: Optional["USound"] = None
         self._entry_actor: Optional[AActor] = None
         self._exit_actor: Optional[AActor] = None
-        
+
         self._zone_gravity = FVector(0, 0, -900)
-        
+
         self._kill_z = 0
-        
-        self._terrain_type: Optional['ATerrainInfo'] = None
-        
+
+        self._terrain_type: Optional["ATerrainInfo"] = None
+
         self._last_enter_time = 0.0
 
 
@@ -343,74 +383,74 @@ class ALevelInfo(AZoneInfo):
         self._dy = 0
         self._mo = 0
         self._lt = 0
-        
+
         self._home_movie: FName = FName("None")
-        
+
         self._allow_pausic = False
-        
+
         self._net_flags = TArray()
-        
+
         self._actors: TArray[AActor] = TArray()
-        
+
         self._prerequisite: Optional[AActor] = None
 
 
 class APawn(AActor):
     def __init__(self):
         super().__init__()
-        self._player: Optional['UPlayer'] = None
-        self._controller: Optional['AController'] = None
-        
+        self._player: Optional["UPlayer"] = None
+        self._controller: Optional["AController"] = None
+
         self._view_rotation = FRotator()
         self._desired_rotation = FRotator()
-        
+
         self._ground_roof = 0.0
         self._last_floor_z = 0.0
-        
+
         self._b_is_player = False
         self._b_broadcast_to = False
-        
+
         self._health = 100
         self._max_health = 100
-        
-        self._face: Optional['UTexture'] = None
-        self._multi_skins: TArray['UTexture'] = TArray()
+
+        self._face: Optional["UTexture"] = None
+        self._multi_skins: TArray["UTexture"] = TArray()
         self._head_bone = FName("head")
         self._mesh_name: FName = FName("None")
-        
-        self._sound_impact: Optional['USound'] = None
-        self._sound_jump: Optional['USound'] = None
-        self._sound_land: Optional['USound'] = None
-        
+
+        self._sound_impact: Optional["USound"] = None
+        self._sound_jump: Optional["USound"] = None
+        self._sound_land: Optional["USound"] = None
+
         self._weapon: Optional[AWeapon] = None
-        self._inventory: Optional['AInventory'] = None
-        
+        self._inventory: Optional["AInventory"] = None
+
         self._enemy: Optional[AActor] = None
-        
+
         self._hits = 0
         self._stumps = 0
-        
+
         self._b_can_jump = True
         self._b_can_walk = True
         self._b_can_swim = True
-        
+
         self._move_direction = FVector()
 
 
 class APlayerPawn(APawn):
     def __init__(self):
         super().__init__()
-        self._player: Optional['UPlayer'] = None
-        self._viewport: Optional['UViewport'] = None
+        self._player: Optional["UPlayer"] = None
+        self._viewport: Optional["UViewport"] = None
         self._god_mode = False
         self._fov_angle = 90.0
         self._desired_fov = 90.0
-        
+
         self._shot_time = 0.0
-        
+
         self._flash_va = FVector()
         self._flash_vb = FVector()
-        
+
         self._b_is_player = True
 
 
@@ -418,32 +458,32 @@ class AWeapon(AActor):
     def __init__(self):
         super().__init__()
         self._player: Optional[APlayerPawn] = None
-        
+
         self._ammo_removed = 0
         self._fire_count = 0
-        
+
         self._pickup_uses = 0
-        
+
         self._item_name: FName = FName("None")
-        
+
         self._fire_anim: FName = FName("None")
         self._select_anim: FName = FName("None")
-        
+
         self._projectile_class: Optional[UClass] = None
         self._alt_projectile_class: Optional[UClass] = None
-        
-        self._fire_sound: Optional['USound'] = None
-        self._alt_fire_sound: Optional['USound'] = None
-        self._select_sound: Optional['USound'] = None
-        
-        self._reload_sound: Optional['USound'] = None
-        self._muzzle_smoke: Optional['UEmitter'] = None
-        
-        self._ammo_type: Optional['AInventory'] = None
-        self._alt_ammo_type: Optional['AInventory'] = None
-        
+
+        self._fire_sound: Optional["USound"] = None
+        self._alt_fire_sound: Optional["USound"] = None
+        self._select_sound: Optional["USound"] = None
+
+        self._reload_sound: Optional["USound"] = None
+        self._muzzle_smoke: Optional["UEmitter"] = None
+
+        self._ammo_type: Optional["AInventory"] = None
+        self._alt_ammo_type: Optional["AInventory"] = None
+
         self._aim = FVector()
-        
+
         self._b_point_accurate = False
         self._b_burst_fire = False
         self._b_aim_offset = False
@@ -453,16 +493,16 @@ class AInventory(AActor):
     def __init__(self):
         super().__init__()
         self._original_actor: Optional[AActor] = None
-        
+
         self._item_name: FName = FName("None")
         self._item_article = 1
-        
-        self._pickup_sound: Optional['USound'] = None
-        
+
+        self._pickup_sound: Optional["USound"] = None
+
         self._player: Optional[APlayerPawn] = None
-        
+
         self._next_inventory: Optional[AInventory] = None
-        
+
         self._b_active_inventory = False
 
 
@@ -471,7 +511,7 @@ class AAmmo(AInventory):
         super().__init__()
         self._ammo_amount = 0
         self._max_ammo = 0
-        
+
         self._ammo_class: Optional[UClass] = None
 
 
@@ -487,19 +527,19 @@ class APickup(AInventory):
 class ACamera(AActor):
     def __init__(self):
         super().__init__()
-        self._viewport: Optional['UViewport'] = None
-        self._camera_mesh: Optional['UMesh'] = None
+        self._viewport: Optional["UViewport"] = None
+        self._camera_mesh: Optional["UMesh"] = None
         self._camera_actor: Optional[AActor] = None
-        
+
         self._shake_timer = 0.0
         self._shake_magnitude = FVector()
-        
+
         self._default_fov = 90.0
         self._fov = 90.0
-        
+
         self._b_static = False
         self._b_show_debug = False
-        
+
         self._view_target: Optional[AActor] = None
 
 
@@ -508,15 +548,15 @@ class AProjectile(AActor):
         super().__init__()
         self._speed = 0.0
         self._max_wanted_speed = 0.0
-        
+
         self._damage = 0.0
         self._damage_radius = 0.0
-        
+
         self._momentum = 0.0
-        
+
         self._damage_type: FName = FName("None")
         self._spawner: Optional[AActor] = None
-        
+
         self._b_net_on_header = False
         self._b_alt_keep = False
 
@@ -525,16 +565,16 @@ class AController(UObject):
     def __init__(self):
         super().__init__()
         self._pawn: Optional[APawn] = None
-        self._player: Optional['UPlayer'] = None
-        
+        self._player: Optional["UPlayer"] = None
+
         self._order: FName = FName("None")
         self._focus: Optional[AActor] = None
         self._target: Optional[AActor] = None
-        
+
         self._location = FVector()
-        
+
         self._damage_type: FName = FName("None")
-        
+
         self._b_delayed = False
         self._b_notify_log = False
         self._b_bot = False
@@ -544,15 +584,15 @@ class APlayerController(AController):
     def __init__(self):
         super().__init__()
         self._player = None
-        self._viewport: Optional['UViewport'] = None
+        self._viewport: Optional["UViewport"] = None
         self._interactions = TArray()
-        
+
         self._key_0: int = 0
         self._key_1: int = 0
         self._key_2: int = 0
-        
+
         self._fov_desired_angle = 90.0
-        
+
         self._b_a_i_l_ing = False
 
 
@@ -560,27 +600,27 @@ class AGameInfo(UObject):
     def __init__(self):
         super().__init__()
         self._game_type: FName = FName("None")
-        
-        self._admin: Optional['APlayer'] = None
-        
+
+        self._admin: Optional["APlayer"] = None
+
         self._game_options: FString = FString()
-        
+
         self._current_team = 0
-        
+
         self._rules_list: TArray = TArray()
-        
+
         self._eligible_players: TArray = TArray()
-        
+
         self._scoreboard_class: Optional[UClass] = None
         self._scoring_class: Optional[UClass] = None
-        
+
         self._death_match_class: Optional[UClass] = None
-        
+
         self._b_balanced_teams = False
         self._b_allow_death_message = True
-        
+
         self._b_no_cheating = False
-        
+
         self._b_allow_join_in_progress = False
 
 
@@ -589,34 +629,34 @@ class ULevel(UObject):
         super().__init__()
         self._actors: TArray[AActor] = TArray()
         self._fruit: TArray[AActor] = TArray()
-        
+
         self._level_info: Optional[ALevelInfo] = None
-        self._engine: Optional['UEngine'] = None
-        
-        self._url: Optional['UURL'] = None
-        
-        self._model: Optional['UModel'] = None
-        
-        self._polys: Optional['UPolys'] = None
-        
+        self._engine: Optional["UEngine"] = None
+
+        self._url: Optional["UURL"] = None
+
+        self._model: Optional["UModel"] = None
+
+        self._polys: Optional["UPolys"] = None
+
         self._first_search_actor: Optional[AActor] = None
         self._last_stale_referenced_actor: Optional[AActor] = None
-        
+
         self._b_allow_path_building = True
-        
+
         self._b_fully_loaded = False
         self._b_requested_full_update = False
-        
+
         self._b_world_compose_event_found = False
-        
+
         self._tick_started = False
-        
+
         self._last_render_time = 0.0
-        
+
         self._hunt_list: TArray[AActor] = TArray()
-        
+
         self._note_list: TArray[AActor] = TArray()
-        
+
         self._block_bsp = 0
 
 
@@ -624,9 +664,9 @@ class UGameEngine(UObject):
     def __init__(self):
         super().__init__()
         self._game: Optional[AGameInfo] = None
-        self._client: Optional['UClient'] = None
-        self._server: Optional['UServer'] = None
-        
+        self._client: Optional["UClient"] = None
+        self._server: Optional["UServer"] = None
+
         self._b_enable_stats = False
         self._b_show_debug = False
 
@@ -638,16 +678,18 @@ class URenderDevice(UObject):
         self._b_use_hardware = False
         self._b_supports_video_memory_texture = False
         self._b_waits_for_video = False
-    
-    def init(self, engine: 'UEngine') -> bool:
+
+    def init(self, engine: "UEngine") -> bool:
         return True
-    
+
     def shutdown(self) -> None:
         pass
-    
-    def set_resize(self, render_width: int, render_height: int, is_fullscreen: bool) -> bool:
+
+    def set_resize(
+        self, render_width: int, render_height: int, is_fullscreen: bool
+    ) -> bool:
         return True
-    
+
     def exec(self, cmd: str, out: FOutputDevice) -> bool:
         return False
 
@@ -655,7 +697,7 @@ class URenderDevice(UObject):
 class AEmitter(AActor):
     def __init__(self):
         super().__init__()
-        self._particle_template: Optional['UEmitter'] = None
+        self._particle_template: Optional["UEmitter"] = None
 
 
 class ATerrainInfo(AZoneInfo):
@@ -681,7 +723,7 @@ class UServer(UObject):
 class UClient(UObject):
     def __init__(self):
         super().__init__()
-        self._viewport: Optional['UViewport'] = None
+        self._viewport: Optional["UViewport"] = None
 
 
 class UURL(UObject):
@@ -694,26 +736,26 @@ class UURL(UObject):
         self._options: dict = {}
         self._portal: str = ""
         self._valid: bool = False
-    
+
     def is_internal(self) -> bool:
         return self._protocol.lower() in ("unreal", "local")
-    
+
     def is_local_internal(self) -> bool:
         return self._protocol.lower() == "local" and not self._host
-    
+
     def has_option(self, name: str) -> bool:
         return name in self._options
-    
+
     def get_option(self, name: str, default: str = "") -> str:
         return self._options.get(name, default)
-    
+
     def add_option(self, option: str) -> None:
         if "=" in option:
             key, value = option.split("=", 1)
             self._options[key] = value
         else:
             self._options[option] = ""
-    
+
     def url_string(self, fully_qualified: bool = False) -> str:
         result = f"{self._protocol}://"
         if self._host:
@@ -727,12 +769,14 @@ class UURL(UObject):
             else:
                 result += f"?{key}"
         return result
-    
-    def __eq__(self, other: 'UURL') -> bool:
-        return (self._protocol == other._protocol and 
-                self._host == other._host and 
-                self._port == other._port and 
-                self._map == other._map)
+
+    def __eq__(self, other: "UURL") -> bool:
+        return (
+            self._protocol == other._protocol
+            and self._host == other._host
+            and self._port == other._port
+            and self._map == other._map
+        )
 
 
 class EConnectionState(IntEnum):
@@ -759,9 +803,9 @@ MAX_PACKET_TRAILER_BITS = 1
 
 
 class FOutBunch:
-    def __init__(self, connection: Optional['UNetConnection'] = None):
+    def __init__(self, connection: Optional["UNetConnection"] = None):
         self._connection = connection
-        self._data: bytes = b''
+        self._data: bytes = b""
         self._b_reliable: bool = False
         self._b_acked: bool = False
         self._ch_index: int = 0
@@ -769,99 +813,224 @@ class FOutBunch:
 
 
 class FInBunch:
-    def __init__(self, connection: Optional['UNetConnection'] = None):
+    def __init__(self, connection: Optional["UNetConnection"] = None):
         self._connection = connection
-        self._data: bytes = b''
+        self._data: bytes = b""
         self._b_reliable: bool = False
         self._ch_index: int = 0
         self._packet_id: int = 0
 
 
 class UChannel(UObject):
-    def __init__(self):
+    """UnChan.h:12-73"""
+
+    # Variables (UnChan.h:16-32).
+    Connection: Optional["UNetConnection"] = None  # UNetConnection*
+    OpenAcked: bool = False  # UBOOL
+    Closing: bool = False  # UBOOL
+    ChIndex: int = 0  # INT
+    OpenedLocally: int = 0  # INT
+    OpenPacketId: int = 0  # INT
+    OpenTemporary: bool = False  # UBOOL
+    ChType: "EChannelType" = EChannelType.CHTYPE_None  # EChannelType
+    NumInRec: int = 0  # INT
+    NumOutRec: int = 0  # INT
+    NegotiatedVer: int = 0  # INT
+    InRec: Optional["FInBunch"] = None  # FInBunch*
+    OutRec: Optional["FOutBunch"] = None  # FOutBunch*
+    Broken: bool = False  # UBOOL
+
+    # Static (UnChan.h:34-36).
+    ChannelClasses: list = [None] * EChannelType.CHTYPE_MAX  # UClass*[CHTYPE_MAX]
+
+    def __init__(self) -> None:
         super().__init__()
-        self._connection: Optional['UNetConnection'] = None
-        self._open_acked: bool = False
-        self._closing: bool = False
-        self._ch_index: int = 0
-        self._opened_locally: bool = False
-        self._open_packet_id: int = 0
-        self._open_temporary: bool = False
-        self._ch_type: EChannelType = EChannelType.CHTYPE_None
-        self._num_in_rec: int = 0
-        self._num_out_rec: int = 0
-        self._negotiated_ver: int = 0
-        self._in_rec: Optional[FInBunch] = None
-        self._out_rec: Optional[FOutBunch] = None
-        self._broken: bool = False
-    
-    def init(self, connection: 'UNetConnection', ch_index: int, opened_locally: bool) -> None:
-        self._connection = connection
-        self._ch_index = ch_index
-        self._opened_locally = opened_locally
-    
-    def set_closing_flag(self) -> None:
-        self._closing = True
-    
-    def close(self) -> None:
-        self._closing = True
-    
-    def describe(self) -> str:
-        return f"Channel {self._ch_index}"
-    
-    def received_bunch(self, bunch: FInBunch) -> None:
-        pass
-    
-    def received_nak(self, nak_packet_id: int) -> None:
-        pass
-    
-    def tick(self, delta_time: float) -> None:
-        pass
+
+    # Constructors / interface (UnChan.h:38-73).
+    def Destroy(self) -> None:
+        raise NotImplementedError("C++ UChannel::Destroy: Engine.lib")
+
+    def Init(
+        self, InConnection: "UNetConnection", InChIndex: int, InOpenedLocally: bool
+    ) -> None:
+        raise NotImplementedError("C++ UChannel::Init: Engine.lib")
+
+    def SetClosingFlag(self) -> None:
+        raise NotImplementedError("C++ UChannel::SetClosingFlag: Engine.lib")
+
+    def Close(self) -> None:
+        raise NotImplementedError("C++ UChannel::Close: Engine.lib")
+
+    def Describe(self) -> "FString":
+        raise NotImplementedError("C++ UChannel::Describe: Engine.lib")
+
+    def ReceivedBunch(self, Bunch: "FInBunch") -> None:
+        raise NotImplementedError("C++ UChannel::ReceivedBunch: Engine.lib")
+
+    def ReceivedNak(self, NakPacketId: int) -> None:
+        raise NotImplementedError("C++ UChannel::ReceivedNak: Engine.lib")
+
+    def Tick(self) -> None:
+        raise NotImplementedError("C++ UChannel::Tick: Engine.lib")
+
+    def RouteDestroy(self) -> int:
+        raise NotImplementedError("C++ UChannel::RouteDestroy: Engine.lib")
+
+    def ReceivedAcks(self) -> None:
+        raise NotImplementedError("C++ UChannel::ReceivedAcks: Engine.lib")
+
+    def ReceivedSequencedBunch(self, Bunch: "FInBunch") -> bool:
+        raise NotImplementedError("C++ UChannel::ReceivedSequencedBunch: Engine.lib")
+
+    def ReceivedRawBunch(self, Bunch: "FInBunch") -> None:
+        raise NotImplementedError("C++ UChannel::ReceivedRawBunch: Engine.lib")
+
+    def SendBunch(self, Bunch: "FOutBunch", Merge: bool) -> int:
+        raise NotImplementedError("C++ UChannel::SendBunch: Engine.lib")
+
+    def IsNetReady(self, Saturate: bool) -> bool:
+        raise NotImplementedError("C++ UChannel::IsNetReady: Engine.lib")
+
+    def AssertInSequenced(self) -> int:
+        raise NotImplementedError("C++ UChannel::AssertInSequenced: Engine.lib")
+
+    def MaxSendBytes(self) -> int:
+        raise NotImplementedError("C++ UChannel::MaxSendBytes: Engine.lib")
+
+    @staticmethod
+    def IsKnownChannelType(Type: int) -> bool:
+        raise NotImplementedError("C++ UChannel::IsKnownChannelType: Engine.lib")
 
 
 class UControlChannel(UChannel, FOutputDevice):
-    def __init__(self):
-        super().__init__()
-        self._ch_type = EChannelType.CHTYPE_Control
-    
-    def init(self, connection: 'UNetConnection', ch_index: int, opened_locally: bool) -> None:
-        super().init(connection, ch_index, opened_locally)
-    
-    def received_bunch(self, bunch: FInBunch) -> None:
-        data = bunch._data.decode('utf-8', errors='replace')
-        self.serialize(data)
-    
-    def serialize(self, data: str, event: FName = FName("Log")) -> None:
-        pass
+    """UnChan.h:74-106"""
+
+    def __init__(self) -> None:
+        super(UControlChannel, self).__init__()
+        # UnChan.h:93: StaticConstructor sets ChType to CHTYPE_Control.
+        self.ChType = EChannelType.CHTYPE_Control
+
+    def StaticConstructor(self) -> None:
+        # UnChan.h:89-94 (inline body in header, body in Engine.lib).
+        raise NotImplementedError("C++ UControlChannel::StaticConstructor: Engine.lib")
+
+    def Init(
+        self, InConnection: "UNetConnection", InChIndex: int, InOpenedLocally: bool
+    ) -> None:
+        raise NotImplementedError("C++ UControlChannel::Init: Engine.lib")
+
+    def Destroy(self) -> None:
+        raise NotImplementedError("C++ UControlChannel::Destroy: Engine.lib")
+
+    def ReceivedBunch(self, Bunch: "FInBunch") -> None:
+        raise NotImplementedError("C++ UControlChannel::ReceivedBunch: Engine.lib")
+
+    def Serialize(self, Data: "TCHAR", Event: "FName") -> None:
+        # UnChan.h:105: Serialize const TCHAR*, EName.
+        raise NotImplementedError("C++ UControlChannel::Serialize: Engine.lib")
+
+    def Describe(self) -> "FString":
+        raise NotImplementedError("C++ UControlChannel::Describe: Engine.lib")
 
 
 class UActorChannel(UChannel):
-    def __init__(self):
-        super().__init__()
-        self._ch_type = EChannelType.CHTYPE_Actor
-        self._actor: Optional[AActor] = None
-    
-    def received_bunch(self, bunch: FInBunch) -> None:
-        pass
+    """UnChan.h:108-166"""
+
+    def __init__(self) -> None:
+        super(UActorChannel, self).__init__()
+        self.Level: Optional["ULevel"] = None  # ULevel*
+        self.Actor: Optional["AActor"] = None  # AActor*
+        self.ActorClass: Optional["UClass"] = None  # UClass*
+        self.RelevantTime: "FTime" = FTime()  # FTime
+        self.LastUpdateTime: "FTime" = FTime()  # FTime
+        self.SpawnAcked: bool = False  # UBOOL
+        self.NumReps: int = 0  # INT
+        self.Recent: list = []  # TArray<BYTE>
+        self.RepEval: list = []  # TArray<BYTE>
+        self.Dirty: list = []  # TArray<INT>
+        self.Retirement: list = []  # TArray<FPropertyRetirement>
+        self.ChType = EChannelType.CHTYPE_Actor
+
+    def StaticConstructor(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::StaticConstructor: Engine.lib")
+
+    def Init(
+        self, InConnection: "UNetConnection", InChIndex: int, InOpenedLocally: bool
+    ) -> None:
+        raise NotImplementedError("C++ UActorChannel::Init: Engine.lib")
+
+    def Destroy(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::Destroy: Engine.lib")
+
+    def SetClosingFlag(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::SetClosingFlag: Engine.lib")
+
+    def ReceivedBunch(self, Bunch: "FInBunch") -> None:
+        raise NotImplementedError("C++ UActorChannel::ReceivedBunch: Engine.lib")
+
+    def ReceivedNak(self, NakPacketId: int) -> None:
+        raise NotImplementedError("C++ UActorChannel::ReceivedNak: Engine.lib")
+
+    def Close(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::Close: Engine.lib")
+
+    def Tick(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::Tick: Engine.lib")
+
+    def GetActor(self) -> Optional["AActor"]:
+        return self.Actor  # UnChan.h:165 inline
+
+    def Describe(self) -> "FString":
+        raise NotImplementedError("C++ UActorChannel::Describe: Engine.lib")
+
+    def ReplicateActor(self) -> None:
+        raise NotImplementedError("C++ UActorChannel::ReplicateActor: Engine.lib")
+
+    def SetChannelActor(self, InActor: "AActor") -> None:
+        raise NotImplementedError("C++ UActorChannel::SetChannelActor: Engine.lib")
 
 
 class UFileChannel(UChannel):
-    def __init__(self):
-        super().__init__()
-        self._ch_type = EChannelType.CHTYPE_File
-    
-    def received_bunch(self, bunch: FInBunch) -> None:
-        pass
+    """UnChan.h:168-189"""
+
+    def __init__(self) -> None:
+        super(UFileChannel, self).__init__()
+        self.Download: Optional[Any] = None  # UChannelDownload*
+        self.SendFileAr: Optional["FArchive"] = None  # FArchive*
+        self.SrcFilename: str = ""  # TCHAR[256]
+        self.PackageIndex: int = 0  # INT
+        self.SentData: int = 0  # INT
+        self.ChType = EChannelType.CHTYPE_File
+
+    def StaticConstructor(self) -> None:
+        raise NotImplementedError("C++ UFileChannel::StaticConstructor: Engine.lib")
+
+    def Init(
+        self, InConnection: "UNetConnection", InChIndex: int, InOpenedLocally: bool
+    ) -> None:
+        raise NotImplementedError("C++ UFileChannel::Init: Engine.lib")
+
+    def Destroy(self) -> None:
+        raise NotImplementedError("C++ UFileChannel::Destroy: Engine.lib")
+
+    def ReceivedBunch(self, Bunch: "FInBunch") -> None:
+        raise NotImplementedError("C++ UFileChannel::ReceivedBunch: Engine.lib")
+
+    def Describe(self) -> "FString":
+        raise NotImplementedError("C++ UFileChannel::Describe: Engine.lib")
+
+    def Tick(self) -> None:
+        raise NotImplementedError("C++ UFileChannel::Tick: Engine.lib")
 
 
 class UNetConnection(UPlayer):
     def __init__(self):
         super().__init__()
-        self._driver: Optional['UNetDriver'] = None
+        self._driver: Optional["UNetDriver"] = None
         self._state: EConnectionState = EConnectionState.USOCK_Invalid
         self._url: Optional[UURL] = None
         self._package_map: Optional[UPackageMap] = None
-        
+
         self._protocol_version: int = 1
         self._remote_version: int = 0
         self._max_packet: int = 256
@@ -871,43 +1040,43 @@ class UNetConnection(UPlayer):
         self._negotiated_ver: int = 0
         self._user_flags: int = 0
         self._request_url: FString = FString()
-        
+
         self._last_receive_time: float = 0.0
         self._last_send_time: float = 0.0
         self._last_tick_time: float = 0.0
         self._last_rep_time: float = 0.0
         self._queued_bytes: int = 0
         self._tick_count: int = 0
-        
+
         self._allow_merge: bool = True
         self._time_sensitive: bool = False
         self._last_out_bunch: Optional[FOutBunch] = None
-        
+
         self._in_rate: float = 0.0
         self._out_rate: float = 0.0
         self._in_packets: float = 0.0
         self._out_packets: float = 0.0
         self._in_bunches: float = 0.0
         self._out_bunches: float = 0.0
-        
+
         self._channels: list = []
-    
-    def init(self, driver: 'UNetDriver', url: UURL) -> None:
+
+    def init(self, driver: "UNetDriver", url: UURL) -> None:
         self._driver = driver
         self._url = url
-    
+
     def close(self) -> None:
         self._state = EConnectionState.USOCK_Closed
-    
+
     def tick(self, delta_time: float) -> None:
         pass
-    
+
     def send_bunch(self, bunch: FOutBunch) -> int:
         return 0
-    
+
     def is_net_ready(self, saturate: bool) -> bool:
         return True
-    
+
     def channel_for_index(self, index: int) -> Optional[UChannel]:
         if 0 <= index < len(self._channels):
             return self._channels[index]
@@ -919,35 +1088,35 @@ class UNetDriver(UObject):
         super().__init__()
         self._clientconnections: list = []
         self._serverconnections: list = []
-        
+
         self._max_channels: int = 1023
         self._max_connections: int = 16
-        
+
         self._time_slice: float = 0.05
         self._allow_latent_transfer: bool = True
-        
+
         self._net_speed: int = 10000
         self._initial_bandwidth: float = 0.0
         self._requested_channels: int = 0
-    
-    def init(self, engine: 'UEngine') -> bool:
+
+    def init(self, engine: "UEngine") -> bool:
         return True
-    
+
     def shutdown(self) -> None:
         pass
-    
+
     def tick(self, delta_time: float) -> None:
         pass
-    
+
     def notify_player(self, connection: UNetConnection) -> None:
         pass
-    
+
     def notify_postplayer(self, connection: UNetConnection) -> None:
         pass
-    
+
     def close_connection(self, connection: UNetConnection) -> None:
         pass
-    
+
     def verify_checksum(self, data: bytes) -> int:
         return 0
 
@@ -955,14 +1124,14 @@ class UNetDriver(UObject):
 class UChannelIterator:
     def __init__(self, driver: UNetDriver):
         self._driver = driver
-    
+
     def __iter__(self):
         return iter(self._driver._serverconnections + self._driver._clientconnections)
 
 
 class DelayedPacket:
     def __init__(self):
-        self._data: bytes = b''
+        self._data: bytes = b""
         self._send_time: float = 0.0
 
 
@@ -982,10 +1151,10 @@ class UPendingLevel(UObject):
         self._download_info: list = []
         self._failed_reason: str = ""
         self._completed: bool = False
-    
+
     def tick(self, delta_time: float) -> None:
         pass
-    
+
     def aborted(self, reason: str) -> None:
         self._failed_reason = reason
         self._completed = True
@@ -1018,7 +1187,7 @@ class UServer(UObject):
 class UClient(UObject):
     def __init__(self):
         super().__init__()
-        self._viewport: Optional['UViewport'] = None
+        self._viewport: Optional["UViewport"] = None
 
 
 class FDownload:
@@ -1034,90 +1203,191 @@ class FDownload:
 class UDownloadNotify:
     def __init__(self):
         self._downloads: list = []
-    
+
     def set_guarded_correspondence(self) -> None:
         pass
-    
+
     def callback(self, frame: int) -> None:
         pass
 
 
 from .classes import (
     EngineEventNames,
-    EInputKey, EInputAction, ETravelType, EDodgeDir,
-    ELightEffect, ELightType, EMusicTransition, ESoundSlot,
-    ERenderStyle, EDrawType, ENetRole, EPhysics,
-    EIntelligence, EAttitude, ECsgOper, EBumpType,
-    EMoverGlideType, EMoverEncroachType, ENetMode,
+    EInputKey,
+    EInputAction,
+    ETravelType,
+    EDodgeDir,
+    ELightEffect,
+    ELightType,
+    EMusicTransition,
+    ESoundSlot,
+    ERenderStyle,
+    EDrawType,
+    ENetRole,
+    EPhysics,
+    EIntelligence,
+    EAttitude,
+    ECsgOper,
+    EBumpType,
+    EMoverGlideType,
+    EMoverEncroachType,
+    ENetMode,
     ELevelAction,
-    AActor_eventSpawn_Parms, AActor_eventDestroy_Parms,
-    AActor_eventGainedChild_Parms, AActor_eventLostChild_Parms,
-    AActor_eventTrigger_Parms, AActor_eventUnTrigger_Parms,
-    AActor_eventTimer_Parms, AActor_eventHitWall_Parms,
-    AActor_eventFalling_Parms, AActor_eventLanded_Parms,
-    AActor_eventZoneChange_Parms, AActor_eventTouch_Parms,
-    AActor_eventUnTouch_Parms, AActor_eventBump_Parms,
-    AActor_eventBaseChange_Parms, AActor_eventAttach_Parms,
+    AActor_eventSpawn_Parms,
+    AActor_eventDestroy_Parms,
+    AActor_eventGainedChild_Parms,
+    AActor_eventLostChild_Parms,
+    AActor_eventTrigger_Parms,
+    AActor_eventUnTrigger_Parms,
+    AActor_eventTimer_Parms,
+    AActor_eventHitWall_Parms,
+    AActor_eventFalling_Parms,
+    AActor_eventLanded_Parms,
+    AActor_eventZoneChange_Parms,
+    AActor_eventTouch_Parms,
+    AActor_eventUnTouch_Parms,
+    AActor_eventBump_Parms,
+    AActor_eventBaseChange_Parms,
+    AActor_eventAttach_Parms,
 )
 from .un_obj import (
-    EBspNodeFlags, FPointRegion, FBspNode,
-    FZoneProperties, FLeaf, FBspSurf, EPolyFlags,
-    FShadowMask, FLightMapIndex, ESplitType, FPoly,
-    UPolys, FVert, FDecal,
+    EBspNodeFlags,
+    FPointRegion,
+    FBspNode,
+    FZoneProperties,
+    FLeaf,
+    FBspSurf,
+    EPolyFlags,
+    FShadowMask,
+    FLightMapIndex,
+    ESplitType,
+    FPoly,
+    UPolys,
+    FVert,
+    FDecal,
 )
 from .skeletal_mesh import (
-    VJointPos, FMeshBone, FNamedBone, FNamedBoneBinary,
-    AnimInfoBinary, VChunkHeader, VMaterial, VBone,
-    VBoneInfIndex, VBoneInfluence, VRawBoneInfluence,
-    VQuatAnimKey, AnalogTrack, MotionChunkDigestInfo,
-    MotionChunk, TrackDiffs, VVertex, VPoint, VTriangle,
-    USkelImport, USkeletalMesh, UAnimation,
+    VJointPos,
+    FMeshBone,
+    FNamedBone,
+    FNamedBoneBinary,
+    AnimInfoBinary,
+    VChunkHeader,
+    VMaterial,
+    VBone,
+    VBoneInfIndex,
+    VBoneInfluence,
+    VRawBoneInfluence,
+    VQuatAnimKey,
+    AnalogTrack,
+    MotionChunkDigestInfo,
+    MotionChunk,
+    TrackDiffs,
+    VVertex,
+    VPoint,
+    VTriangle,
+    USkelImport,
+    USkeletalMesh,
+    UAnimation,
 )
 from .texture import UTexture, FTextureInfo
 from .assets import (
-    AssetLoader, GAssetLoader,
-    UPackage as UPackageAsset, UTextureAsset, USoundAsset, UMeshAsset,
-    FPackageFileSummary, FObjectExport, FObjectImport,
+    AssetLoader,
+    GAssetLoader,
+    UPackage as UPackageAsset,
+    UTextureAsset,
+    USoundAsset,
+    UMeshAsset,
+    FPackageFileSummary,
+    FObjectExport,
+    FObjectImport,
 )
 from .level import (
-    EAcceptConnection, ETraceActorFlags, ELevelTick,
-    FNetworkNotify, FCollisionHashBase, g_new_collision_hash,
-    NUM_LEVEL_TEXT_BLOCKS, ULevelBase, ULevel, FStaticBrushIterator,
+    EAcceptConnection,
+    ETraceActorFlags,
+    ELevelTick,
+    FNetworkNotify,
+    FCollisionHashBase,
+    g_new_collision_hash,
+    NUM_LEVEL_TEXT_BLOCKS,
+    ULevelBase,
+    ULevel,
+    FStaticBrushIterator,
 )
 from .net import (
     best_signed_difference,
     make_relative,
 )
 from .render import (
-    ORTHO_LOW_DETAIL, FOutVector, FTransform, FTransSample, FTransTexture,
-    FSurfaceInfo, FSavedPoly, FSurfaceFacet, FScreenBounds, ELineFlags,
-    URenderBase, HBspSurf, HActor, HCoords,
+    ORTHO_LOW_DETAIL,
+    FOutVector,
+    FTransform,
+    FTransSample,
+    FTransTexture,
+    FSurfaceInfo,
+    FSavedPoly,
+    FSurfaceFacet,
+    FScreenBounds,
+    ELineFlags,
+    URenderBase,
+    HBspSurf,
+    HActor,
+    HCoords,
 )
 from .render_structs import (
-    FSceneNode, FSpanBuffer, FSpan, FRasterPoly,
-    FDynamicItem, FDynamicSprite, FBspDrawList,
+    FSceneNode,
+    FSpanBuffer,
+    FSpan,
+    FRasterPoly,
+    FDynamicItem,
+    FDynamicSprite,
+    FBspDrawList,
 )
 from .camera import (
-    ETextOut, EViewportBlitFlags, ERenderType, EViewportCaps,
-    EViewportShowFlags, EMouseButtons,
-    UCanvas, FHitCause, FHitObserver, HHitProxy,
-    UViewport, UClient, URenderBase,
-    MAX_COLOR_BYTES, LODSET_MAX,
+    ETextOut,
+    EViewportBlitFlags,
+    ERenderType,
+    EViewportCaps,
+    EViewportShowFlags,
+    EMouseButtons,
+    UCanvas,
+    FHitCause,
+    FHitObserver,
+    HHitProxy,
+    UViewport,
+    UClient,
+    URenderBase,
+    MAX_COLOR_BYTES,
+    LODSET_MAX,
 )
 from .audio import (
-    HAVE_VAG, make_four_cc,
-    UAudioSubsystem, FSoundData, USound, UMusic,
-    FRiffWaveHeader, FRiffChunkOld, FFormatChunk, FSampleChunk, FSampleLoop,
+    HAVE_VAG,
+    make_four_cc,
+    UAudioSubsystem,
+    FSoundData,
+    USound,
+    UMusic,
+    FRiffWaveHeader,
+    FRiffChunkOld,
+    FFormatChunk,
+    FSampleChunk,
+    FSampleLoop,
     FWaveModInfo,
 )
 from .console import (
     UConsole,
-    UConsole_eventMessage_Parms, UConsole_eventConnectFailure_Parms,
+    UConsole_eventMessage_Parms,
+    UConsole_eventConnectFailure_Parms,
 )
 from .engine_core import UEngine, UServerCommandlet
 from .engine_win import (
-    FExecHook, WConfigWizard,
-    WConfigPageFirstTime, WConfigPageSafeOptions, WConfigPageDetail,
-    WConfigPageDriver, WConfigPageRenderer, WConfigPageSafeMode,
+    FExecHook,
+    WConfigWizard,
+    WConfigPageFirstTime,
+    WConfigPageSafeOptions,
+    WConfigPageDetail,
+    WConfigPageDriver,
+    WConfigPageRenderer,
+    WConfigPageSafeMode,
 )
 from .net_conn import UNetConnection
