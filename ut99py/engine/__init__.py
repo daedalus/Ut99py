@@ -1119,3 +1119,4 @@ from .engine_win import (
     WConfigPageFirstTime, WConfigPageSafeOptions, WConfigPageDetail,
     WConfigPageDriver, WConfigPageRenderer, WConfigPageSafeMode,
 )
+from .net_conn import UNetConnection
