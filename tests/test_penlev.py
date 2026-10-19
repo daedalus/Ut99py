@@ -23,10 +23,11 @@ def test_unet_pending_level_noconstruct():
 
 def test_unet_pending_level_lib_bodies():
     p = UNetPendingLevel.__new__(UNetPendingLevel)
+    p.NetDriver = None
+    # GetDriver inline: { return NetDriver; }
+    assert p.GetDriver() is None
     with pytest.raises(NotImplementedError):
         p.Tick(0.0)
-    with pytest.raises(NotImplementedError):
-        p.GetDriver()
     with pytest.raises(NotImplementedError):
         p.SendJoin()
     with pytest.raises(NotImplementedError):

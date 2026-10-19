@@ -46,6 +46,7 @@ class UNetPendingLevel(UPendingLevel):
         self.Error: str = ""
         self.FailCode: str = ""
         self.FailURL: str = ""
+        self.NetDriver: Any = None
 
     def StaticConstructor(self) -> None:
         raise NotImplementedError("C++ UNetPendingLevel::StaticConstructor: Engine.lib")
