@@ -387,16 +387,8 @@ class USkeletalMesh(UMesh):
         self._skeletal_depths: list = []
 
 
-class UModel(UObject):
-    def __init__(self):
-        super().__init__()
-        self._bounds = FVector()
-        self._bounds_quasi: FVector()
-        self._root: int = 0
-        self._nodes: list = []
-        self._polys: Optional[UPolys] = None
-        self._light_map: list = []
-        self._vertex_index: list = []
+# UModel ported from UnModel.h in graphics/model.py.
+from .model import UModel
 
 
 UEngine = None
