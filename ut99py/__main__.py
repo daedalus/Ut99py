@@ -73,9 +73,9 @@ def main():
 
     print("  [AUDIO] Audio subsystem...")
     audio = UAudioSubsystem()
-    print(f"    - Channels: {audio._channels}")
+    print(f"    - Subsystem: {type(audio).__name__} (interface; impls in Engine.lib)")
     sound = USound()
-    print(f"    - Sound: {sound._duration}s @ {sound._sample_rate}Hz")
+    print(f"    - Sound: duration={sound.Duration}s (lazy until GetPeriod)")
 
     print("  [GFX] Rendering...")
     # The OpenGL renderer is already embedded in the GameWindow

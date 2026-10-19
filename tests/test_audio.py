@@ -146,3 +146,36 @@ def test_wave_struct_field_layouts_match_header():
         "dwFraction",
         "dwPlayCount",
     }
+
+
+def test_audio_package_reexports_the_header_port():
+    # Reconciliation: the invented stand-ins are gone; ut99py.audio, the
+    # ut99py top level, ut99py.engine and engine.assets must all resolve to
+    # the single class set in ut99py.engine.audio (UnAudio.h).
+    from ut99py import USound as TopUSound, UAudioSubsystem as TopSubsystem
+    from ut99py import audio as audio_pkg
+    from ut99py.engine import USound as EngineUSound
+    from ut99py.engine import UAudioSubsystem as EngineSubsystem
+    from ut99py.engine import assets
+
+    assert audio_pkg.USound is USound
+    assert audio_pkg.UMusic is UMusic
+    assert audio_pkg.UAudioSubsystem is UAudioSubsystem
+    assert TopUSound is USound
+    assert TopSubsystem is UAudioSubsystem
+    assert EngineUSound is USound
+    assert EngineSubsystem is UAudioSubsystem
+    assert assets.USound is USound
+    assert USound.__module__ == "ut99py.engine.audio"
+
+
+def test_audio_package_keeps_placeholder_surface():
+    # The Audio/ module placeholders (pending Audio/Inc headers) survive the
+    # reconciliation alongside the re-exported trio.
+    from ut99py import FPlayingSound, Sample, Voice
+    from ut99py import audio as audio_pkg
+
+    for name in ("Voice", "Sample", "FPlayingSound", "AudioLibrary", "UAudioDevice"):
+        assert hasattr(audio_pkg, name)
+    assert audio_pkg.Voice is Voice
+    assert audio_pkg.FPlayingSound is FPlayingSound

@@ -1,20 +1,20 @@
 """Audio package - Sound playback and mixing
 
-Ported from Ut99PubSrc/Audio/
-- UAudioSubsystem: Base audio subsystem
-- USound: Sound data
-- Voice: Audio voice/channel
-- Audio mixing
+- USound/UMusic/UAudioSubsystem are re-exported from ut99py/engine/audio.py,
+  the port of Engine/Inc/UnAudio.h; this package carried invented stand-ins
+  for those three until they were reconciled onto the real header (Oct 2026).
+- Voice/Sample/FPlayingSound and the mixer flags remain placeholders pending
+  the Audio/ module port (Ut99PubSrc/Audio/, not ported yet).
 """
 
-from typing import TYPE_CHECKING, Optional, ClassVar
+from typing import TYPE_CHECKING, Optional
 from enum import IntEnum
 
 from ..core import (
-    UObject, UClass,
-    FVector, FName, FString, TArray,
-    RF_NoFlags,
+    UObject,
+    FVector, TArray,
 )
+from ..engine.audio import USound, UMusic, UAudioSubsystem
 
 if TYPE_CHECKING:
     from ..engine import AActor
@@ -110,97 +110,6 @@ class FPlayingSound:
         self.radius: float = 0.0
         self.pitch: float = 1.0
         self.priority: float = 0.0
-
-
-class USound(UObject):
-    _sounds: ClassVar[TArray['USound']] = TArray()
-    
-    def __init__(self):
-        super().__init__()
-        self._data: bytes = b''
-        self._format: int = 0
-        self._size: int = 0
-        self._duration: float = 0.0
-        self._sample_rate: int = 22050
-    
-    @property
-    def data(self) -> bytes:
-        return self._data
-    
-    @property
-    def duration(self) -> float:
-        return self._duration
-    
-    @property
-    def sample_rate(self) -> int:
-        return self._sample_rate
-    
-    def __repr__(self) -> str:
-        return f"<USound {self.get_full_name()} duration={self._duration:.2f}>"
-
-
-class UAudioSubsystem(UObject):
-    _audio_subsystems: ClassVar[TArray['UAudioSubsystem']] = TArray()
-    
-    def __init__(self):
-        super().__init__()
-        self._use_filter: bool = True
-        self._use_surround: bool = False
-        self._use_stereo: bool = True
-        self._use_cd_music: bool = True
-        self._use_digital_music: bool = True
-        self._reverse_stereo: bool = False
-        self._initialized: bool = False
-        self._ambient_factor: float = 1.0
-        self._doppler_speed: float = 1.0
-        self._latency: int = 50
-        self._channels: int = AUDIO_TOTALCHANNELS
-        self._output_rate: int = 22050
-        self._music_volume: int = 128
-        self._sound_volume: int = 200
-    
-    def init(self) -> bool:
-        return True
-    
-    def shutdown(self) -> None:
-        pass
-    
-    def set_master_volume(self, volume: int) -> None:
-        self._sound_volume = volume
-    
-    def set_music_volume(self, volume: int) -> None:
-        self._music_volume = volume
-    
-    def play_sound(self, actor: 'AActor', id: int, sound: USound, location: FVector, volume: float, radius: float, pitch: float, priority: float = 0.0) -> FPlayingSound:
-        return FPlayingSound()
-    
-    def stop_sound(self, sound: FPlayingSound) -> None:
-        pass
-    
-    def pause_sound(self, sound: FPlayingSound, paused: bool) -> None:
-        pass
-    
-    def get_duration(self, sound: USound) -> float:
-        return sound.duration
-    
-    def play_music(self, song: USound, offset: int = 0) -> None:
-        pass
-    
-    def stop_music(self) -> None:
-        pass
-    
-    def is_music_playing(self) -> bool:
-        return False
-
-
-class UMusic(UObject):
-    def __init__(self):
-        super().__init__()
-        self._data: bytes = b''
-        self._title: str = ""
-        self._artist: str = ""
-        self._album: str = ""
-        self._duration: float = 0.0
 
 
 class AudioLibrary:

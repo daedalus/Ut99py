@@ -228,6 +228,15 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       FWaveModInfo readers/reducers/filters) exist only in the prebuilt
       `Engine.lib` (msvc symbols verified) and raise. Pinned by
       `tests/test_audio.py`.
+- [x] `Engine/Inc/UnAudio.h` port reconciled into `ut99py/audio/__init__.py`:
+      the invented `USound`/`UMusic`/`UAudioSubsystem` stand-ins are deleted
+      and re-exported from `ut99py/engine/audio.py`, so `ut99py.USound`,
+      `ut99py.audio.USound`, `ut99py.engine.USound` and
+      `engine.assets.USound` are one class object. `Voice`/`Sample`/
+      `FPlayingSound`/mixer placeholders stay pending the `Audio/` module;
+      `__main__.py`'s prints of the invented `_channels`/`_duration`/
+      `_sample_rate` fields now use the header field set. Pinned by
+      `tests/test_audio.py`.
 
 ## Engine Subsystems Pending
 - [ ] **Networking**: `UnNet.h`, `UnNetDrv.h`, `UnChan.h`, `UnBunch.h`, `UnConn.h`, `UnDownload.h`, `UnDemoRec.h`.
@@ -239,11 +248,6 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - [ ] **Input & Engine Core**: `UnIn.h`, `UnCamera.h`, `UnEngine.h`, `UnGame.h`, `UnPlayer.h`, `UnURL.h`.
 
 ## Known deviations to reconcile
-- `ut99py/audio/__init__.py` (initial commit) carries its own invented
-  `USound`/`UMusic`/`UAudioSubsystem` that cite no header and differ from the
-  `UnAudio.h` port in `ut99py/engine/audio.py`; `ut99py/__init__.py` and
-  `graphics/` still import the audio-package ones. Reconcile onto
-  `engine/audio.py` like the `assets.py` case.
 - Python `NAME_*` in `core/types.py` are `FName` objects, not the C++ `EName`
   ints. Keep for compatibility; `core/names.py` supplies the numeric enum +
   index→string table the linker needs.
