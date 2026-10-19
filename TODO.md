@@ -80,7 +80,8 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 
 *   **Ported Core Headers**: 16/20 (FCodec.h, FRiffChunk.h, UnArc.h, UnBits.h, UnClass.h, UnCoreNet.h, UnFile.h, UnNames.h, UnObjBas.h, UnObjVer.h, UnScript.h, UnStack.h, UnType.h, FConfigCacheIni.h, FFeedbackContextAnsi.h, FMallocAnsi.h).
 *   **Partially Ported Engine**: 3/40+ (UnMesh.h, UnTex.h, UPackage/UnPackage.h).
-*   **Detached/Legacy**: `engine/assets.py` (Redundant decoder, needs reconciliation).
+*   **Reconciled**: `engine/assets.py` now delegates the on-disk format to
+    `core/linkers.py` (UPackage wraps the linker's tables).
 *   **Missing Metadata**: Fixed — `engine/mesh.py`, `engine/texture.py` and
     `core/types.py` now cite their source headers (UnMesh.h/UnAnim.h,
     UnTex.h, UnMath.h/UnArc.h), so `tools/port_survey.py` tracks them.
@@ -213,7 +214,9 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
       gaps above); `UClassProperty.GetID` (UnType.h:286) needs `UClassProperty`.
 - [x] **Metadata Compliance**: Add "Ported from" docstrings to `engine/mesh.py` and `engine/texture.py`.
       Also cite UnMath.h/UnArc.h in `core/types.py` so the survey tool sees them.
-- [ ] **Reconciliation**: Merge `engine/assets.py` logic into `core/linkers.py` and delete the redundant loader.
+- [x] **Reconciliation**: `engine/assets.py` now delegates to `core/linkers.py`
+      (`AssetLoader.load_package` wraps a `ULinkerLoad` in `UPackage`); the
+      duplicate summary/name/import/export decoders are deleted.
 
 ## Engine Subsystems Pending
 - [ ] **Networking**: `UnNet.h`, `UnNetDrv.h`, `UnChan.h`, `UnBunch.h`, `UnConn.h`, `UnDownload.h`, `UnDemoRec.h`.
@@ -254,10 +257,6 @@ Source of truth: `~/code/Ut99PubSrc` (read-only).
 - `ULinkerLoad` does not push the summary's file version into `FArchive._ver`
   (`ULinkerLoad::ULinkerLoad` is in `Core.lib`), so `ar.ver()` reports the
   default `PACKAGE_FILE_VERSION` during object serialization.
-- `engine/assets.py` has a third header/table decoder that still reads UTF-16
-  `FString`s for names (UT99 uses ANSI). Reconcile it onto `core/linkers.py`.
-- `assets.py FPackageFileSummary.serialize` reads `PackageFlags` only when
-  `file_version >= 68`; C++ reads it unconditionally (see `UnLinker.h`).
 - `FPackageFileSummary.serialize` only follows the pre-68 heritage GUID list
   when `HeritageOffset + HeritageCount * 16` fits in the archive. UnLinker.h:158
   runs the loop unconditionally, which a bogus count turns into an unbounded

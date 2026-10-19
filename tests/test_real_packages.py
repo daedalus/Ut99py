@@ -317,3 +317,48 @@ def test_package_flags_use_only_defined_bits():
         assert undefined == 0, (path, hex(undefined))
         seen |= flags
     assert seen & PKG_AllowDownload
+
+
+TEXTURES_DIR = GAME_DIR / "Textures"
+MAPS_DIR = GAME_DIR / "Maps"
+
+ALFA_FX = TEXTURES_DIR / "AlfaFX.utx"
+DM_MORPHEUS = MAPS_DIR / "DM-Morpheus.unr"
+
+
+@pytest.mark.skipif(not ALFA_FX.is_file(), reason="AlfaFX.utx not installed")
+def test_asset_loader_reads_a_pre_sized_name_table_package():
+    """GAssetLoader must load a v61 package through core/linkers.py.
+
+    engine/assets.py once parsed the tables with its own length-prefixed
+    reader: the header skipped PackageFlags, so the generation count came out
+    as file garbage and load_package hung in the generation loop.
+    """
+    from ut99py.engine.assets import AssetLoader
+
+    package = AssetLoader().load_package(str(ALFA_FX))
+    assert package is not None
+    assert package._file_version == 61
+    assert len(package._name_table) >= 30
+    assert len(package._imports) >= 2
+    assert len(package._exports) >= 4
+    assert [str(n) for n in package._name_table[:2]] == ["None", "InternalTime"]
+    assert package._imports[1].object_name.name == "Fire"
+    assert package._exports[0].object_name.name == "lion2"
+    # The export serial spans chain from the name table to the import table.
+    spans = sorted((e.serial_offset, e.serial_size) for e in package._exports)
+    assert spans[0][0] >= OLDVER_NAME_OFFSET
+    assert max(off + size for off, size in spans) == package._summary.import_offset
+
+
+@pytest.mark.skipif(not DM_MORPHEUS.is_file(), reason="DM-Morpheus.unr not installed")
+def test_asset_loader_reads_a_v68_map():
+    """GAssetLoader must load sized-name-table packages the same way."""
+    from ut99py.engine.assets import AssetLoader
+
+    package = AssetLoader().load_package(str(DM_MORPHEUS))
+    assert package is not None
+    assert package._file_version >= VER_GUID_AND_GENERATIONS
+    assert len(package._name_table) >= 1000
+    assert len(package._exports) >= 1000
+    assert package._summary.generations

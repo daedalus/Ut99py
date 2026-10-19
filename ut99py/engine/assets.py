@@ -9,26 +9,31 @@ Loading flow:
 3. Load import table (classes/objects referenced)
 4. Load export table (objects defined in this package)
 5. Deserialize each object, resolving internal references
+
+Steps 2-4 (the on-disk format) are owned by core/linkers.py; UPackage adds
+the asset view on top of the linker's tables.
 """
 
 from typing import Optional, Dict, List, Any
 from enum import IntEnum
-import struct
 import os
 
-from ..core.types import (
-    FName, FGuid, FVector, FRotator, FPlane,
-    TArray,
-)
-from ..core.objects import UObject, UClass, UPackage
-from ..core.system import FArchive, FArchiveFileReader, GLog
-from ..core.objver import PACKAGE_FILE_TAG, VER_GUID_AND_GENERATIONS
+from ..core.types import FName, FGuid, FVector
+from ..core.objects import UObject
+from ..core.system import FArchive, GLog
+from ..core.objver import PACKAGE_FILE_TAG
+from ..core import linkers as core_linkers
+from ..core.linkers import FPackageFileSummary, FObjectExport, FObjectImport
+from .texture import UTexture
+from .mesh import UMesh
+from ..audio import USound
 
 SIGNATURE_UT = PACKAGE_FILE_TAG
 
 
 class EPackageFlags(IntEnum):
     """Package flags stored in header"""
+
     PKG_Allowable = 0x00000001
     PKG_ClientRequired = 0x00000002
     PKG_ServerSideOnly = 0x00000004
@@ -41,106 +46,12 @@ class EPackageFlags(IntEnum):
     PKG_Dirty = 0x00000200
 
 
-class FPackageFileSummary:
-    """Package file header - first thing read from any .u/.unr file"""
-    
-    def __init__(self):
-        self._magic: int = 0x00000000
-        self._file_version: int = 0
-        self._licensee_version: int = 0
-        self._package_flags: int = 0
-        self._name_count: int = 0
-        self._name_offset: int = 0
-        self._export_count: int = 0
-        self._export_offset: int = 0
-        self._import_count: int = 0
-        self._import_offset: int = 0
-        self._dependency_table_offset: int = 0
-        self._thumbnail_offset: int = 0
-        self._guid: FGuid = FGuid()
-        self._generations: List[Dict] = []
-        self._saved_by_engine_version: int = 0
-        self._compatible_with_engine_version: int = 0
-    
-    def serialize(self, ar: FArchive) -> 'FPackageFileSummary':
-        """Load package header from archive"""
-        self._magic = ar._read_uint32()
-        
-        # Check magic (0x9e2a83c1 for UT packages)
-        if self._magic != SIGNATURE_UT:
-            import warnings
-            warnings.warn(f"Unknown package magic: 0x{self._magic:08x}")
-        
-        self._file_version = ar._read_uint32()
-        self._licensee_version = ar._read_uint32()
-        
-        if self._file_version >= VER_GUID_AND_GENERATIONS:
-            self._package_flags = ar._read_int32()
-        
-        self._name_count = ar._read_int32()
-        self._name_offset = ar._read_int32()
-        
-        self._export_count = ar._read_int32()
-        self._export_offset = ar._read_int32()
-        
-        self._import_count = ar._read_int32()
-        self._import_offset = ar._read_int32()
-        
-        if self._file_version >= 70:
-            self._dependency_table_offset = ar._read_int32()
-        if self._file_version >= 74:
-            self._thumbnail_offset = ar._read_int64()
-        
-        # Read GUID
-        self._guid._a = ar._read_uint32()
-        self._guid._b = ar._read_uint32()
-        self._guid._c = ar._read_uint32()
-        self._guid._d = ar._read_uint32()
-        
-        # Read generations
-        gen_count = ar._read_int32()
-        for _ in range(gen_count):
-            gen = {
-                'export_count': ar._read_int32(),
-                'name_count': ar._read_int32()
-            }
-            self._generations.append(gen)
-        
-        return self
-
-
-class FObjectExport:
-    """Single object export entry in package"""
-    
-    def __init__(self):
-        self._class_index: int = 0          # Index into import/export table
-        self._super_index: int = 0           # Parent class
-        self._package_index: int = 0        # Package this object belongs to
-        self._object_name: FName = FName()
-        self._flags: int = 0
-        self._serial_size: int = 0
-        self._serial_offset: int = 0
-        self._load_failed: bool = False
-        self._object: Optional[UObject] = None
-
-
-class FObjectImport:
-    """Single object import entry (object referenced by this package)"""
-    
-    def __init__(self):
-        self._class_package: FName = FName()
-        self._class_name: FName = FName()
-        self._package_index: int = 0
-        self._object_name: FName = FName()
-        self._x_level: bool = False
-
-
 class UPackage(UObject):
     """Unreal package (.u/.unr/.utx/.usx files)
-    
+
     Contains serialized game assets: textures, meshes, sounds, levels, etc.
     """
-    
+
     def __init__(self, name: str = ""):
         super().__init__()
         self._name = FName(name)
@@ -148,29 +59,31 @@ class UPackage(UObject):
         self._flags: int = 0
         self._file_version: int = 0
         self._licensee_version: int = 0
-        
+
+        self._summary: Optional[FPackageFileSummary] = None
+        self._linker: Optional[core_linkers.ULinkerLoad] = None
         self._name_table: List[FName] = []
         self._imports: List[FObjectImport] = []
         self._exports: List[FObjectExport] = []
-        
+
         self._fully_loaded: bool = False
-        self._source_package: Optional['UPackage'] = None
-        
+        self._source_package: Optional["UPackage"] = None
+
         self._filename: str = ""
-    
+
     def get_header(self) -> FPackageFileSummary:
         return self._summary
-    
+
     def get_export_count(self) -> int:
         return len(self._exports)
-    
+
     def get_import_count(self) -> int:
         return len(self._imports)
 
 
 class UTextureAsset(UObject):
     """Texture asset (.utx files)"""
-    
+
     def __init__(self):
         super().__init__()
         self._format: int = 0
@@ -190,7 +103,7 @@ class UTextureAsset(UObject):
 
 class USoundAsset(UObject):
     """Sound asset (.uax files)"""
-    
+
     def __init__(self):
         super().__init__()
         self._sample_rate: int = 22050
@@ -204,7 +117,7 @@ class USoundAsset(UObject):
 
 class UMeshAsset(UObject):
     """Mesh asset (.usx files)"""
-    
+
     def __init__(self):
         super().__init__()
         self._vertex_count: int = 0
@@ -217,7 +130,7 @@ class UMeshAsset(UObject):
 
 class FLevelSummary:
     """Level summary stored in .unr files"""
-    
+
     def __init__(self):
         self._title: FName = FName()
         self._author: FName = FName()
@@ -230,27 +143,27 @@ class FLevelSummary:
 
 class AssetLoader:
     """Main asset loading system
-    
+
     Handles loading packages (.u/.unr/.utx/.uax/.usx) and
     extracting textures, sounds, meshes, and level data.
     """
-    
+
     def __init__(self):
         self._loaded_packages: Dict[str, UPackage] = {}
         self._package_path: str = ""
-        
+
         self._texture_cache: Dict[str, UTexture] = {}
         self._sound_cache: Dict[str, USound] = {}
         self._mesh_cache: Dict[str, UMesh] = {}
-        
+
         self._pending_packages: List[str] = []
         self._b_async_loading: bool = False
         self._async_load_complete_callbacks: Dict[str, list] = {}
-    
+
     def set_package_path(self, path: str) -> None:
         """Set base path for package files"""
-        self._package_path = path.rstrip('/\\')
-    
+        self._package_path = path.rstrip("/\\")
+
     def _get_package_path(self, filename: str) -> str:
         """Get full path to package file"""
         if os.path.isabs(filename):
@@ -258,166 +171,102 @@ class AssetLoader:
         if self._package_path:
             return os.path.join(self._package_path, filename)
         return filename
-    
+
     def load_package(self, filename: str) -> Optional[UPackage]:
         """Load a complete package file
-        
+
         Args:
             filename: Package filename (e.g., "Botpack.u", "DM-Turbine.unr")
-            
+
         Returns:
             Loaded UPackage or None on failure
         """
         full_path = self._get_package_path(filename)
-        
+
         if not os.path.exists(full_path):
             GLog.serialize(f"Package not found: {full_path}")
             return None
-        
+
         if filename in self._loaded_packages:
             return self._loaded_packages[filename]
-        
-        try:
-            ar = FArchiveFileReader(full_path)
-            package = UPackage(filename)
-            self._load_package_header(package, ar)
-            self._load_name_table(package, ar)
-            self._load_import_table(package, ar)
-            self._load_export_table(package, ar)
-            
-            self._loaded_packages[filename] = package
-            ar.close()
-            
-            GLog.serialize(f"Loaded package: {filename} ({package.get_export_count()} exports)")
-            return package
-        except Exception as e:
-            GLog.serialize(f"Failed to load package {filename}: {e}")
-            return None
-    
-    def _load_package_header(self, package: UPackage, ar: FArchive) -> None:
-        """Load package file header (FPackageFileSummary)"""
-        package._summary = FPackageFileSummary()
-        package._summary.serialize(ar)
-        package._file_version = package._summary._file_version
-        package._licensee_version = package._summary._licensee_version
-        package._guid = package._summary._guid
-        package._flags = package._summary._package_flags
-        package._filename = ar._file.name if hasattr(ar, '_file') else ""
-    
-    def _load_name_table(self, package: UPackage, ar: FArchive) -> None:
-        """Load name table (FName entries)
 
-        For package files version < 70 (pre-UE2), names are null-terminated
-        ASCII strings followed by 4-byte flags, not length-prefixed UTF-16.
-        Version 70+ packages (and newer Unreal Engine versions) use length-prefixed
-        format handled by serialize_name.
-        """
-        ar.seek(package._summary._name_offset)
-        
-        # Determine name format by file version
-        null_terminated = package._file_version < 70
-        
-        for _ in range(package._summary._name_count):
-            if null_terminated:
-                # Null-terminated ASCII name + 4-byte flags (v61 format)
-                chars = []
-                while True:
-                    b = ar._read_byte()
-                    if b == 0:
-                        break
-                    chars.append(b)
-                name_str = bytes(chars).decode('latin-1', errors='replace')
-                flags = ar._read_int32() if ar.read(4) else 0
-            else:
-                # Length-prefixed UTF-16 name (v70+ format)
-                name_str = ar._read_string()
-                flags = ar._read_int32()
-            fname = FName(name_str, flags)
-            package._name_table.append(fname)
-    
-    def _load_import_table(self, package: UPackage, ar: FArchive) -> None:
-        """Load import table (objects this package depends on)"""
-        ar.seek(package._summary._import_offset)
-        
-        for _ in range(package._summary._import_count):
-            imp = FObjectImport()
-            imp._class_package = FName(ar._read_string())
-            imp._class_name = FName(ar._read_string())
-            imp._package_index = ar._read_int32()
-            imp._object_name = FName(ar._read_string())
-            if package._file_version >= VER_GUID_AND_GENERATIONS:
-                imp._x_level = ar._read_bool()
-            package._imports.append(imp)
-    
-    def _load_export_table(self, package: UPackage, ar: FArchive) -> None:
-        """Load export table (objects defined in this package)"""
-        ar.seek(package._summary._export_offset)
-        
-        for _ in range(package._summary._export_count):
-            exp = FObjectExport()
-            exp._class_index = ar._read_int32()
-            exp._super_index = ar._read_int32()
-            exp._package_index = ar._read_int32()
-            exp._object_name = FName(ar._read_string())
-            exp._flags = ar._read_int32()
-            exp._serial_size = ar._read_int32()
-            exp._serial_offset = ar._read_int32()
-            package._exports.append(exp)
-            
+        # core/linkers.py owns the on-disk format (summary, name/import/export
+        # tables, all AR_INDEX-based); UPackage only wraps its tables.
+        linker = core_linkers.load_package(full_path)
+        if linker is None:
+            GLog.serialize(f"Failed to load package {filename}")
+            return None
+
+        summary = linker.summary
+        package = UPackage(filename)
+        package._linker = linker
+        package._summary = summary
+        package._file_version = summary.get_file_version()
+        package._licensee_version = summary.get_file_version_licensee()
+        package._guid = summary.guid
+        package._flags = summary.package_flags
+        package._filename = full_path
+        package._name_table = list(linker.name_map)
+        package._imports = list(linker.import_map)
+        package._exports = list(linker.export_map)
+
+        self._loaded_packages[filename] = package
+
+        GLog.serialize(
+            f"Loaded package: {filename} ({package.get_export_count()} exports)"
+        )
+        return package
+
     def _deserialize_exports(self, package: UPackage, ar: FArchive) -> None:
         """Deserialize exported objects from package archive"""
-        # Create a temporary linker for resolving object references
-        linker = ULinkerLoad()
-        linker._exports = package._exports
-        linker._imports = package._imports
-        package._source_linker = linker
-        
-        # Set archive to loading mode and attach linker
+        # Object references resolve through the linker that read the tables.
         ar._loading = True
-        ar._linker = linker
-        
+        ar._linker = package._linker
+
         # Deserialize each exported object
         for exp in package._exports:
             # Seek to object's serialized data
-            ar.seek(exp._serial_offset)
-            
+            ar.seek(exp.serial_offset)
+
             # Determine object class from export entry
-            class_index = exp._class_index
+            class_index = exp.class_index
             if class_index == 0:
                 # Index 0 means UObject (usually indicates an error or placeholder)
                 continue
-                
+
             # For now, we'll create placeholder objects
             # Full implementation would resolve class_index to actual UClass
             # and instantiate the correct object type
-            if exp._object_name.get_text().lower().endswith('_tex') or \
-               exp._object_name.get_text().lower().endswith('texture'):
+            name = exp.object_name.name
+            if name.lower().endswith("_tex") or name.lower().endswith("texture"):
                 # Likely a texture
                 texture = UTexture()
-                texture._name = exp._object_name
+                texture._name = exp.object_name
                 texture._package = package
                 texture.serialize(ar)  # This will deserialize texture properties
-                exp._object = texture
-            elif 'level' in exp._object_name.get_text().lower():
+                exp.obj = texture
+            elif "level" in name.lower():
                 # Likely a level
                 from ..engine.level import ULevel
+
                 level = ULevel()
-                level._name = exp._object_name
+                level._name = exp.object_name
                 level._package = package
                 level.serialize_level(ar)  # This will deserialize level data
-                exp._object = level
+                exp.obj = level
             else:
                 # Generic object - create UObject placeholder
-                from ..core.objects import UObject
                 obj = UObject()
-                obj._name = exp._object_name
+                obj._name = exp.object_name
                 obj._package = package
                 # Skip serialization for now
-                exp._object = obj
-    
-    def get_texture(self, package_name: str, texture_name: str) -> Optional['UTextureAsset']:
+                exp.obj = obj
+
+    def get_texture(
+        self, package_name: str, texture_name: str
+    ) -> Optional["UTextureAsset"]:
         """Load texture from package
-        
+
         Args:
             package_name: Package containing texture (e.g., "GenIn.u")
             texture_name: Texture object name
@@ -425,99 +274,99 @@ class AssetLoader:
         cache_key = f"{package_name}.{texture_name}"
         if cache_key in self._texture_cache:
             return self._texture_cache[cache_key]
-        
+
         package = self.load_package(package_name)
         if not package:
             return None
-        
+
         for exp in package._exports:
-            if exp._object_name.get_text() == texture_name:
+            if exp.object_name.name == texture_name:
                 texture = UTexture()
-                texture._name = texture_name
+                texture._name = FName(texture_name)
                 texture._package = package_name
                 self._texture_cache[cache_key] = texture
                 return texture
-        
+
         return None
-    
-    def get_sound(self, package_name: str, sound_name: str) -> Optional['USoundAsset']:
+
+    def get_sound(self, package_name: str, sound_name: str) -> Optional["USoundAsset"]:
         """Load sound from package"""
         cache_key = f"{package_name}.{sound_name}"
         if cache_key in self._sound_cache:
             return self._sound_cache[cache_key]
-        
+
         package = self.load_package(package_name)
         if not package:
             return None
-        
+
         for exp in package._exports:
-            if exp._object_name.get_text() == sound_name:
+            if exp.object_name.name == sound_name:
                 sound = USound()
-                sound._name = sound_name
+                sound._name = FName(sound_name)
                 sound._package = package_name
                 self._sound_cache[cache_key] = sound
                 return sound
-        
+
         return None
-    
-    def get_mesh(self, package_name: str, mesh_name: str) -> Optional['UMeshAsset']:
+
+    def get_mesh(self, package_name: str, mesh_name: str) -> Optional["UMeshAsset"]:
         """Load mesh from package"""
         cache_key = f"{package_name}.{mesh_name}"
         if cache_key in self._mesh_cache:
             return self._mesh_cache[cache_key]
-        
+
         package = self.load_package(package_name)
         if not package:
             return None
-        
+
         for exp in package._exports:
-            if exp._object_name.get_text() == mesh_name:
+            if exp.object_name.name == mesh_name:
                 mesh = UMesh()
-                mesh._name = mesh_name
+                mesh._name = FName(mesh_name)
                 mesh._package = package_name
                 self._mesh_cache[cache_key] = mesh
                 return mesh
-        
+
         return None
-    
+
     def load_level(self, level_name: str) -> Optional[UPackage]:
         """Load level package (.unr file)
-        
+
         Args:
             level_name: Level name (e.g., "DM-Turbine", "CTF-Command")
         """
-        if not level_name.endswith('.unr'):
-            level_name = level_name + '.unr'
-        
+        if not level_name.endswith(".unr"):
+            level_name = level_name + ".unr"
+
         return self.load_package(level_name)
-    
+
     def preload_package(self, filename: str) -> None:
         """Preload package header for streaming"""
         full_path = self._get_package_path(filename)
         if not os.path.exists(full_path):
             return
-        
+
         self._pending_packages.append(filename)
-    
+
     def process_async_loads(self) -> None:
         """Process pending async package loads"""
         if not self._pending_packages:
             return
-        
+
         filename = self._pending_packages.pop(0)
         package = self.load_package(filename)
-        
+
         if package and filename in self._async_load_complete_callbacks:
             for callback in self._async_load_complete_callbacks[filename]:
                 callback(package)
-    
+
     def flush_cache(self) -> None:
         """Flush all asset caches"""
         self._texture_cache.clear()
         self._sound_cache.clear()
         self._mesh_cache.clear()
         self._loaded_packages.clear()
-    
+
     def get_loaded_packages(self) -> List[str]:
         """Get list of loaded package names"""
         return list(self._loaded_packages.keys())
