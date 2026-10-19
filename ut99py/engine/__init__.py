@@ -1114,6 +1114,7 @@ from .console import (
     UConsole,
     UConsole_eventMessage_Parms, UConsole_eventConnectFailure_Parms,
 )
+from .engine_core import UEngine, UServerCommandlet
 from .engine_win import (
     FExecHook, WConfigWizard,
     WConfigPageFirstTime, WConfigPageSafeOptions, WConfigPageDetail,
