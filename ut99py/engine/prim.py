@@ -8,51 +8,40 @@ struct constructors inline.
 from __future__ import annotations
 from typing import Any, Optional
 from ..core.types import FBox, FVector, FSphere
-from ..core.template import FIteratorList
 from ..core import UObject
+
+
+class FIteratorList:
+    """Minimal FIteratorList stand-in (UnPrim.h base)."""
+    def __init__(self, next_node=None):
+        self.Next = next_node
+
+    def GetNext(self):
+        return self.Next
 
 
 class FIteratorActorList(FIteratorList):
     """FIteratorActorList (UnPrim.h:36-45)"""
 
-    def __init__(self) -> None:
+    def __init__(self, next_node=None, actor=None):
         # C++ FIteratorActorList() {}
-        super().__init__()
-        self.Actor: Optional["AActor"] = None
-
-    def __init__(self, next_node: Any, actor: "AActor") -> None:
         # C++ FIteratorActorList( FIteratorActorList* InNext, AActor* InActor )
-        # Not trivial to reimplement with FIteratorList; omitted.
         super().__init__(next_node)
-        self.Actor = actor
-
-    def GetNext(self) -> Optional["FIteratorActorList"]:
-        return super().GetNext()  # returns Any
+        self.Actor = actor  # None if first ctor
 
 
 class FCheckResult(FIteratorActorList):
     """FCheckResult (UnPrim.h:47-77)"""
 
-    def __init__(self) -> None:
+    def __init__(self, time: float = 0.0, next_node=None):
         # C++ FCheckResult() {}
-        super().__init__()
+        # C++ FCheckResult( FLOAT InTime, FCheckResult* InNext=NULL )
+        super().__init__(next_node)
+        self.Time = time
         self.Location: FVector = FVector()
         self.Normal: FVector = FVector()
         self.Primitive: Optional["UPrimitive"] = None
-        self.Time: float = 0.0
         self.Item: int = -1
-
-    def __init__(self, time: float, next_node: Any = None) -> None:
-        # C++ FCheckResult( FLOAT InTime, FCheckResult* InNext=NULL )
-        super().__init__(next_node, None)
-        self.Time = time
-        self.Location = FVector()
-        self.Normal = FVector()
-        self.Primitive = None
-        self.Item = -1
-
-    def GetNext(self) -> Optional["FCheckResult"]:
-        return super().GetNext()
 
     @staticmethod
     def compare_hits(a: "FCheckResult", b: "FCheckResult") -> int:
