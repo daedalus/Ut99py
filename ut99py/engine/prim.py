@@ -57,8 +57,12 @@ class UPrimitive(UObject):
         self.BoundingBox: FBox = FBox()
         self.BoundingSphere: FSphere = FSphere()
 
-    def Serialize(self, Ar: Any) -> None:
-        raise NotImplementedError("C++ UPrimitive::Serialize: Engine.lib")
+    def serialize(self, ar: Any) -> "UPrimitive":
+        """UPrimitive::Serialize (UnPrim.cpp:22): the bound box and sphere."""
+        super().serialize(ar)
+        self.BoundingBox.serialize(ar)
+        self.BoundingSphere.serialize(ar)
+        return self
 
     def PointCheck(
         self, result: "FCheckResult", owner: Optional["AActor"], location: FVector, extent: FVector, extra_node_flags: int

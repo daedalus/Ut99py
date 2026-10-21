@@ -31,7 +31,7 @@ DEFAULT_CPP_DIR = Path(os.path.expanduser("~/code/Ut99PubSrc"))
 # Headers a Python module may cite, e.g. "Port of Core/Inc/UnArc.h".
 _HEADER_REF = re.compile(
     r"(?:Port(?:ed)?\s+(?:from|into)\s+)?"
-    r"((?:Core|Engine|Audio|UCC|Setup|Window)/Inc/[A-Za-z0-9_]+\.h)"
+    r"((?:Core|Engine|Audio|UCC|Setup|Window|XDrv|SampleNativePackage)/Inc/[A-Za-z0-9_]+\.h)"
     r"|(?:Port(?:ed)?\s+from\s+)([A-Za-z0-9_]+\.h)"
 )
 # C++ declarations with an optional API macro.
@@ -89,8 +89,7 @@ def scan_python() -> tuple[dict[str, list[str]], set[str]]:
     header_to_py: dict[str, list[str]] = {}
     bare: set[str] = set()
     for py_path in sorted(PY_DIR.rglob("*.py")):
-        if py_path.name == "__init__.py":
-            continue
+        # include __init__.py as they may cite headers
         rel = str(py_path.relative_to(REPO_ROOT))
         for ref in py_module_headers(py_path):
             if "/" in ref:

@@ -11,13 +11,14 @@ from ..engine.un_obj import (
     FBspNode, FBspSurf, FLeaf, FVert, FZoneProperties,
     UPolys, FLightMapIndex, EBspNodeFlags,
 )
+from ..engine.prim import UPrimitive
 from ..core import UObject
 
 MAX_NODES: int = 65536
 MAX_POINTS: int = 128000
 
 
-class UModel(UObject):
+class UModel(UPrimitive):
     """UModel (UnModel.h)."""
 
     def __init__(self) -> None:
@@ -41,8 +42,53 @@ class UModel(UObject):
         self.NumZones: int = 0
         self.Zones = [FZoneProperties() for _ in range(FBspNode.MAX_ZONES)]
 
-    def Serialize(self, Ar: Any) -> None:
-        raise NotImplementedError("C++ UModel::Serialize: Engine.lib")
+    def serialize(self, ar: Any) -> "UModel":
+        """UModel::Serialize (UnModel.cpp:253).
+
+        The arrays come first, then the shared side and zone counts, the
+        zones, the brush polys, the lighting data and the two flags. The
+        pre-62 layout kept the arrays in separate objects; the port reads
+        the version 62+ layout only.
+        """
+        super().serialize(ar)
+        if ar.ver() <= 61:
+            raise NotImplementedError(
+                "UModel::Serialize: the pre-62 layout stores the arrays in "
+                "separate UBspSurfs/UVectors/UVerts objects"
+            )
+        self.Vectors = self._read_array(ar, FVector)
+        self.Points = self._read_array(ar, FVector)
+        self.Nodes = self._read_array(ar, FBspNode)
+        self.Surfs = self._read_array(ar, FBspSurf)
+        self.Verts = self._read_array(ar, FVert)
+        self.NumSharedSides = ar.serialize_int32(self.NumSharedSides)
+        self.NumZones = ar.serialize_int32(self.NumZones)
+        for i in range(self.NumZones):
+            self.Zones[i].serialize(ar)
+        self.Polys = ar.serialize_object(self.Polys)
+        # The C++ calls Ar.Preload(Polys) after the reference so the brush
+        # list's data is loaded, not just the index (UnModel.cpp:304-307).
+        if self.Polys is not None and not ar.is_trans():
+            if hasattr(ar, "preload"):
+                ar.preload(self.Polys)
+        self.LightMap = self._read_array(ar, FLightMapIndex)
+        self.LightBits = self._read_array(ar, int, element_size=1)
+        self.Bounds = self._read_array(ar, FBox)
+        self.LeafHulls = self._read_array(ar, int)
+        self.Leaves = self._read_array(ar, FLeaf)
+        self.Lights = self._read_array(ar, UObject)
+        self.RootOutside = ar.serialize_int32(self.RootOutside)
+        self.Linked = ar.serialize_int32(self.Linked)
+        return self
+
+    @staticmethod
+    def _read_array(ar: Any, element: type, element_size: Optional[int] = None) -> list:
+        """A TArray read with the count as a compact index (UnTemplate.h:435)."""
+        from ..core.types import TArray
+
+        array = TArray()
+        ar.serialize_tarray(array, element=element, element_size=element_size)
+        return list(array)
 
     def PostLoad(self) -> None:
         raise NotImplementedError("C++ UModel::PostLoad: Engine.lib")

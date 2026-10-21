@@ -8,7 +8,10 @@ Serialization implemented from UnLevel.cpp lines 67-100, 233-260.
 from typing import Optional, Any, List
 from enum import IntFlag, IntEnum
 
-from ..core import UObject, FName, FVector, FRotator, FArchive, FGuid
+from ..core import UObject, FName, FVector, FRotator, FArchive, FGuid, FString
+from ..core.system import AR_INDEX
+from .unreach import FReachSpec
+from .unurl import FURL
 
 
 # ----------------------------------------------------------------------
@@ -47,29 +50,38 @@ class FNetworkNotify:
     """Accepting connection responses and network notifications."""
 
     def notify_accepting_connection(self) -> EAcceptConnection:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_accepting_connection (UnLevel.h:50) - virtual
+        in C++ Engine.lib. The port stubs it as no-op."""
+        return EAcceptConnection.ACCEPTC_Ignore
 
     def notify_accepted_connection(self, Connection: Any) -> None:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_accepted_connection (UnLevel.h:55) - virtual."""
+        pass
 
     def notify_accepting_channel(self, Channel: Any) -> bool:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_accepting_channel (UnLevel.h:59) - virtual."""
+        return False
 
     def notify_get_level(self) -> Optional['ULevelBase']:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_get_level (UnLevel.h:62) - virtual."""
+        return None
 
     def notify_received_text(self, Connection: Any, Text: str) -> None:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_received_text (UnLevel.h:65) - virtual."""
+        pass
 
     def notify_sending_file(self, Connection: Any, GUID: FGuid) -> bool:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_sending_file (UnLevel.h:68) - virtual."""
+        return False
 
     def notify_received_file(self, Connection: Any, PackageIndex: int,
                              Error: str, Skipped: bool) -> None:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_received_file (UnLevel.h:72) - virtual."""
+        pass
 
     def notify_progress(self, Str1: str, Str2: str, Seconds: float) -> None:
-        raise NotImplementedError("C++ virtual in Engine.lib")
+        """FNetworkNotify::notify_progress (UnLevel.h:75) - virtual."""
+        pass
 
 
 # ----------------------------------------------------------------------
@@ -129,33 +141,29 @@ class ULevelBase(UObject, FNetworkNotify):
         self.DemoRecDriver: Optional[Any] = None
 
     def serialize(self, ar: Any) -> 'ULevelBase':
-        """ULevelBase::Serialize (UnLevel.cpp:72-100).
+        """ULevelBase::Serialize (UnLevel.cpp:67-100).
 
         Args:
             ar: Archive (ULinkerLoad or FArchiveMemoryReader).
         Returns:
             self for chaining.
         """
-        # Super::Serialize(Ar) — UObject base handled by archive itself.
+        super().serialize(ar)  # UObject::Serialize: the property block.
 
-        # Actors TArray<AActor*>
+        # Actors (UnLevel.cpp:77-88): the old file format keeps the count
+        # twice, then the actor references.
         if ar.is_trans():
-            # IsTrans path: simple tarray serialize
             ar.serialize_tarray(self.Actors)
         else:
-            # oldver path
-            db_num = len(self.Actors)
-            db_max = db_num
-            ar.count_bytes(db_num * 4, db_num * 4)
-            ar.serialize_int32(db_num)
-            ar.serialize_int32(db_max)
+            db_num = ar.serialize_int32(len(self.Actors))
+            ar.serialize_int32(db_num)  # DbMax
             if ar.is_loading():
-                self.Actors = []
-            for _ in range(db_num):
-                ar.serialize_object(None)  # UObject* ref via AR_INDEX -> linker
+                self.Actors = [ar.serialize_object(None) for _ in range(db_num)]
 
-        # URL (FString/FURL)
-        ar.serialize_object(self.URL)
+        # URL (UnLevel.cpp:91): an FURL value, not a pointer.
+        if self.URL is None:
+            self.URL = FURL()
+        self.URL.serialize(ar)
 
         if not ar.is_loading() and not ar.is_saving():
             ar.serialize_object(self.NetDriver)
@@ -171,9 +179,9 @@ class ULevel(ULevelBase):
 
     def __init__(self) -> None:
         super().__init__()
-        self.ReachSpecs: List[int] = []
+        self.ReachSpecs: List[FReachSpec] = []
         self.Model: Optional[Any] = None
-        self.TextBlocks: List[int] = [0] * NUM_LEVEL_TEXT_BLOCKS
+        self.TextBlocks: List[Optional[Any]] = [None] * NUM_LEVEL_TEXT_BLOCKS
         self.TimeSeconds: float = 0.0
         self.TravelInfo: dict = {}
 
@@ -204,7 +212,7 @@ class ULevel(ULevelBase):
         self.Unused = 0
 
     def serialize_level(self, ar: Any) -> 'ULevel':
-        """ULevel::Serialize (UnLevel.cpp:233-260).
+        """ULevel::Serialize (UnLevel.cpp:233-263).
 
         Args:
             ar: Archive (ULinkerLoad or FArchiveMemoryReader).
@@ -212,34 +220,39 @@ class ULevel(ULevelBase):
         Returns:
             self for chaining.
         """
-        # Super::Serialize(Ar) — ULevelBase
-        super().serialize(ar)
+        super().serialize(ar)  # ULevelBase::Serialize
 
-        # ApproxTime (TimeSeconds stored as FLOAT)
-        approx_time = float(self.TimeSeconds)
-        ar.serialize_float(approx_time)
-
-        # Model (UModel*) — compact object index
-        ar.serialize_object(self.Model)
-
-        # ReachSpecs - TArray<INT>
-        ar.serialize_tarray(self.ReachSpecs, element=int)
-
-        # FirstDeleted (INT)
-        ar.serialize_int32(0)
-
-        # TextBlocks[NUM_LEVEL_TEXT_BLOCKS] (16 INT32s)
+        # Model (UModel reference).
+        self.Model = ar.serialize_object(self.Model)
+        # ReachSpecs (TArray<FReachSpec>).
+        self.ReachSpecs = ar.serialize_tarray(self.ReachSpecs, element=FReachSpec)
+        # ApproxTime: the C++ writes TimeSeconds as a FLOAT.
+        self.TimeSeconds = ar.serialize_float(float(self.TimeSeconds))
+        # FirstDeleted (AActor reference).
+        self.FirstDeleted = ar.serialize_object(self.FirstDeleted)
+        # TextBlocks[NUM_LEVEL_TEXT_BLOCKS] (UTextBuffer references).
         for i in range(NUM_LEVEL_TEXT_BLOCKS):
-            ar.serialize_int32(self.TextBlocks[i])
-
-        # TravelInfo (version-dependent)
-        if ar.licensee_ver() > 62:
-            # TMap<FString,FString> — placeholder (not fully decoded yet)
-            ar.serialize_tarray([])
-        elif ar.licensee_ver() >= 61:
-            # Old format: Names array + Items array
-            ar.serialize_tarray([])
-            ar.serialize_tarray([])
+            self.TextBlocks[i] = ar.serialize_object(self.TextBlocks[i])
+        # TravelInfo (TMap<FString,FString>), which the C++ stores as the
+        # map's pair array (UnTemplate.h:1745).
+        if ar.ver() > 62:
+            count = AR_INDEX(ar, len(self.TravelInfo))
+            if ar.is_loading():
+                self.TravelInfo = {}
+                for _ in range(count):
+                    key = ar.serialize_str(FString())
+                    value = ar.serialize_str(FString())
+                    self.TravelInfo[str(key)] = str(value)
+            else:
+                for key, value in self.TravelInfo.items():
+                    ar.serialize_str(FString(key))
+                    ar.serialize_str(FString(value))
+        elif ar.ver() >= 61:
+            # oldver (UnLevel.cpp:249-255): the map as two string arrays.
+            names = ar.serialize_tarray([], element=FString)
+            items = ar.serialize_tarray([], element=FString)
+            if ar.is_loading():
+                self.TravelInfo = dict(zip(names, items))
 
         # Preload Model if present and not trans
         if self.Model is not None and not ar.is_trans():
@@ -249,6 +262,10 @@ class ULevel(ULevelBase):
             ar.count_bytes(0, 0)  # BrushTracker->CountBytes(Ar)
 
         return self
+
+    def serialize(self, ar: Any) -> 'ULevel':
+        """ULevel::Serialize (UnLevel.cpp:233-263) - the linker entry point."""
+        return self.serialize_level(ar)
 
     def destroy(self) -> None:
         raise NotImplementedError("C++ Destroy in Engine.lib")

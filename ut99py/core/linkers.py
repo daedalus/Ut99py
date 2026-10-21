@@ -201,6 +201,9 @@ class ULinkerLoad(ULinker, FArchive):
         if tag != PACKAGE_FILE_TAG:
             raise ValueError(f"Invalid package tag: {tag:#010x}")
 
+        # Ar.Ver() of a linker is the package's file version (UnLinker.h:196).
+        self._ver = self.summary.get_file_version()
+
         self._load_name_table()
         self._load_import_table()
         self._load_export_table()
@@ -336,49 +339,101 @@ class ULinkerLoad(ULinker, FArchive):
         return name
 
     # ---- ULinkerLoad::IndexToObject / CreateExport / CreateImport ----
-    # Inline from UnLinker.h:246-272.  IndexToObject resolves an AR_INDEX into
-    # a UObject pointer via the export/import tables.  CreateExport/CreateImport
-    # are stubs returning placeholder objects (construction in Core.lib).
+    # Inline from UnLinker.h:808-900.  IndexToObject resolves an AR_INDEX into
+    # a UObject pointer via the export/import tables.
     def index_to_object(self, index: int) -> Optional[UObject]:
-        """IndexToObject( INT Index ) (UnLinker.h:249)."""
-        if index == 0:
-            return None
+        """IndexToObject( INT Index ) (UnLinker.h:883)."""
         if index > 0:
-            # Export: positive index into this linker's export table.
-            if 0 <= index < len(self.export_map):
-                exp = self.export_map[index]
-                if exp.obj is not None:
-                    return exp.obj
-                return self.create_export(index)
-            return None
-        # Import: negative index is (index+1) into the import table.
-        import_index = -index - 1
-        if 0 <= import_index < len(self.import_map):
-            return self.create_import(import_index)
+            # Export: the C++ indexes ExportMap with Index-1 (1-based refs).
+            return self.create_export(index - 1)
+        if index < 0:
+            # Import: negative index is (-Index-1) into the import table.
+            return self.create_import(-index - 1)
         return None
 
+    def get_class_name(self, exp: FObjectExport) -> str:
+        """The UnrealScript class name of an export (UnLinker.h:299).
+
+        A positive class index points at a UClass export, whose name is the
+        class name; a negative one at an import, where a "Class" import names
+        the class in its object name.
+        """
+        index = exp.class_index
+        if index > 0:
+            if index - 1 >= len(self.export_map):
+                return ""
+            return self.export_map[index - 1].object_name.name
+        if index < 0:
+            if -index - 1 >= len(self.import_map):
+                return ""
+            imp = self.import_map[-index - 1]
+            if imp.class_name.name == "Class":
+                return imp.object_name.name
+            return imp.class_name.name
+        return ""
+
     def create_export(self, index: int) -> Optional[UObject]:
-        """CreateExport( INT Index ) (UnLinker.h:246)."""
+        """CreateExport( INT Index ) (UnLinker.h:808).
+
+        Constructs the export's object; Preload reads its data.
+        """
         if not (0 <= index < len(self.export_map)):
             return None
         exp = self.export_map[index]
         if exp.obj is not None:
             return exp.obj
-        # C++ CreateExport constructs the object; here we return the export entry
-        # as a placeholder so the pipeline does not deadlock.
-        exp.obj = exp
+        exp.obj = self._construct_export(index, exp)
         return exp.obj
 
+    def _construct_export(self, index: int, exp: FObjectExport) -> UObject:
+        """StaticConstructObject plus SetLinker (UnLinker.h:843-850)."""
+        from ..engine.registry import class_for_name
+
+        obj = class_for_name(self.get_class_name(exp))()
+        obj.name = exp.object_name
+        obj._flags = exp.object_flags
+        obj.set_linker(self, index)
+        return obj
+
     def create_import(self, index: int) -> Optional[UObject]:
-        """CreateImport( INT Index ) (UnLinker.h:247)."""
+        """CreateImport( INT Index ) (UnLinker.h:867).
+
+        The C++ resolves the import through its source linker. The port has no
+        parent package loaded, so it stands in a named placeholder; the class
+        and object name come from the import table.
+        """
         if not (0 <= index < len(self.import_map)):
             return None
         imp = self.import_map[index]
         if imp.x_object is not None:
             return imp.x_object
-        # C++ CreateImport resolves via parent linker; here we return placeholder.
-        imp.x_object = imp
+        from ..engine.registry import import_placeholder
+
+        imp.x_object = import_placeholder(imp)
         return imp.x_object
+
+    def preload(self, obj: UObject) -> None:
+        """Preload( UObject* Object ) (UnLinker.h:750).
+
+        Reads the object's export into memory and checks that it consumed
+        exactly SerialSize bytes.
+        """
+        index = obj.linker_index
+        if index < 0 or index >= len(self.export_map):
+            return
+        exp = self.export_map[index]
+        if exp.obj is not obj:
+            return
+        saved = self.tell()
+        self.seek(exp.serial_offset)
+        obj.serialize(self)
+        consumed = self.tell() - exp.serial_offset
+        if consumed != exp.serial_size:
+            raise ValueError(
+                f"{obj.get_full_name()}: serialised {consumed} bytes, "
+                f"expected {exp.serial_size}"
+            )
+        self.seek(saved)
 
     # Inline operator<<(FArchive&, UObject*&) from UnLinker.h:262-272.
     def serialize_object(self, obj: Optional[UObject]) -> Optional[UObject]:

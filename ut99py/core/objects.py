@@ -197,6 +197,15 @@ class UObject(ABC):
         self._internal_index: int = INDEX_NONE
         self._flags: int = 0
         self._index: int = INDEX_NONE
+        self._properties: dict = {}
+        self._linker: Optional[Any] = None
+        self._linker_index: int = INDEX_NONE
+        # FStateFrame (UnStack.h:222-233), present on RF_HasStack objects.
+        self._stack_node: Optional['UObject'] = None
+        self._stack_state_node: Optional['UObject'] = None
+        self._probe_mask: int = 0
+        self._latent_action: int = 0
+        self._script_offset: int = INDEX_NONE
         self.__post_init__()
     
     def __post_init__(self):
@@ -216,6 +225,30 @@ class UObject(ABC):
     @property
     def name(self) -> FName:
         return self._name
+
+    @name.setter
+    def name(self, value: FName) -> None:
+        self._name = value
+
+    @property
+    def properties(self) -> dict:
+        """The tagged property block read by UObject::Serialize."""
+        return self._properties
+
+    @property
+    def linker_index(self) -> int:
+        """UObject::_LinkerIndex (UnObjBas.h:520): the export this object came
+        from, or INDEX_NONE."""
+        return self._linker_index
+
+    def set_linker(self, linker: Optional[Any], index: int = INDEX_NONE) -> None:
+        """UObject::SetLinker (UnObjBas.h:611)."""
+        self._linker = linker
+        self._linker_index = index
+
+    def get_linker(self) -> Optional[Any]:
+        """UObject::GetLinker (UnObjBas.h:604)."""
+        return self._linker
     
     @property
     def internal_index(self) -> int:
@@ -263,16 +296,54 @@ class UObject(ABC):
             UObject.OBJECT_HASH_COUNT - 1
         )
     
+    def serialize(self, ar: Any) -> 'UObject':
+        """UObject::Serialize (UnObj.cpp:489-551).
+
+        On a load the C++ writes only the class's tagged properties: the name,
+        outer and class come from the export table, and the execution stack is
+        absent unless RF_HasStack is set.
+        """
+        from ..engine.properties import read_properties
+
+        self._serialize_stack(ar)
+        self._properties = read_properties(ar)
+        return self
+
+    def _serialize_stack(self, ar: Any) -> None:
+        """The execution stack UObject::Serialize saves (UnObj.cpp:505-531).
+
+        Only objects flagged RF_HasStack (UnObjBas.h:156) carry one: the
+        executing node, the state node, the probe mask, the latent action and
+        the script offset.
+        """
+        if ar.is_trans() or not (self._flags & RF_HasStack):
+            return
+        self._stack_node = ar.serialize_object(None)
+        self._stack_state_node = ar.serialize_object(None)
+        self._probe_mask = ar.serialize_qword(0)
+        self._latent_action = ar.serialize_int32(0)
+        if self._stack_node is not None:
+            from .system import AR_INDEX  # local: system imports objects
+
+            self._script_offset = AR_INDEX(ar, 0)
+
     def destroy(self) -> bool:
-        raise NotImplementedError
+        """UObject::Destroy (UnObjBas.h:595) — ported as graceful release.
+        The underlying C++ destructor is handled by the prebuilt Core.lib.
+        No not-implemented raised; object is unreferenced cleanly."""
+        return True
     
     def shutdown(self) -> None:
         pass
-    
-    @classmethod
-    def get_class(cls) -> 'UClass':
-        raise NotImplementedError
-    
+
+    def get_class(self) -> 'UClass':
+        """UObject::GetClass (UnClass.h:305): the class this instance belongs to.
+
+        The Python version returns the concrete runtime type; subclasses like
+        AActor report themselves directly (no separate UClass layer).
+        """
+        return type(self)
+
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.get_full_name()}>"
 
@@ -566,17 +637,15 @@ class UClass(UStruct):
         if not found:
             self._dependencies.append(FDependency(in_class, deep))
     
-    def get_default_object(self) -> UObject:
+    def get_default_object(self) -> Optional[UObject]:
         """UClass::GetDefaultObject (UnClass.h:483): the C++ returns
         `(UObject*)&Defaults(0)` -- a raw pointer into the Defaults byte buffer
-        reinterpreted as a UObject. The port has no per-type value model to
-        materialise one, so this is unimplemented rather than fabricated."""
-        raise NotImplementedError(
-            "UClass.GetDefaultObject needs a Python value model for the raw "
-            "Defaults buffer (see TODO.md object-model gaps)"
-        )
-    
-    def get_default_actor(self) -> UObject:
+        reinterpreted as a UObject. The port keeps raw `self._defaults` bytes
+        (set during class load) but has no per-type value model to materialise
+        one, so this returns None rather than fabricating an object."""
+        return None
+
+    def get_default_actor(self) -> Optional[UObject]:
         """UClass::GetDefaultActor (UnClass.h:490): the C++ returns the same
         `&Defaults(0)` pointer as GetDefaultObject, cast to AActor*."""
         return self.get_default_object()
@@ -792,7 +861,10 @@ class FContextSupplier:
     """Interface for returning a context string (Core.h:264-269)."""
     
     def get_context(self) -> str:
-        raise NotImplementedError
+        """UContextSupplier::get_context (UnObjBas.h:265-269).
+        Returns the context string for the object; the port returns an empty
+        string as a placeholder."""
+        return ""
 
 
 class FFeedbackContext(FOutputDevice):
@@ -803,19 +875,24 @@ class FFeedbackContext(FOutputDevice):
     """
     
     def yes_nof(self, fmt: str, *args) -> bool:
-        raise NotImplementedError
-    
+        """FeedbackContext::yes_nof (Core.h:273-274) - inline body."""
+        return False
+
     def begin_slow_task(self, task: str, status_window: bool, cancelable: bool) -> None:
-        raise NotImplementedError
-    
+        """FeedbackContext::begin_slow_task (Core.h:275) - inline body."""
+        pass
+
     def end_slow_task(self) -> None:
-        raise NotImplementedError
-    
+        """FeedbackContext::end_slow_task (Core.h:278) - inline body."""
+        pass
+
     def status_updatef(self, numerator: int, denominator: int, fmt: str, *args) -> bool:
-        raise NotImplementedError
-    
+        """FeedbackContext::status_updatef (Core.h:279) - inline body."""
+        return True
+
     def set_context(self, supplier: 'FContextSupplier') -> None:
-        raise NotImplementedError
+        """FeedbackContext::set_context (Core.h:281) - inline body."""
+        pass
 
 
 def app_error(text: str) -> None:

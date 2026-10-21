@@ -695,7 +695,6 @@ class URenderDevice(UObject):
     def exec(self, cmd: str, out: FOutputDevice) -> bool:
         return False
 
-
 class AEmitter(AActor):
     def __init__(self):
         super().__init__()

@@ -2,11 +2,15 @@
 
 Defines FBspNode, FPointRegion, FLeaf, FBspSurf, FZoneProperties,
 FShadowMask, FLightMapIndex, FPoly, UPolys, FVert, FDecal, and
-related BSP/enums. C++ serializer operators (FArchive& <<)
-are documented but not fully implemented; bodies in prebuilt
-Engine.lib handle persistence.
+related BSP/enums, with the archive operators (FArchive& <<).
+
+The operators whose body is CORE_API or ENGINE_API live in the prebuilt
+Core.lib/Engine.lib; their layout was read off the map files, with the
+inline ones (FZoneProperties, FLeaf, FLightMapIndex, FVert, FDecal,
+UPolys) taken from the header.
 """
 from ..core import UObject, FPlane, FVector, FName
+from ..core.system import AR_INDEX
 
 # ------------------------------------------------------------------
 # BSP node flags (EBspNodeFlags)
@@ -60,6 +64,31 @@ class FBspNode:
             return outside or self.is_csg(extra_flags)
         return outside and not self.is_csg(extra_flags)
 
+    def serialize(self, ar) -> "FBspNode":
+        """operator<<(FArchive&, FBspNode&) (UnObj.h:132).
+
+        The C++ body is ENGINE_API; the layout was read off the map files:
+        the plane, the zone mask, the node flags, nine compact indices, the
+        vertex count and the two leaf indices. The nine index fields are
+        INT in the header but compact indices on disk.
+        """
+        self.plane.serialize(ar)
+        self.zone_mask = ar.serialize_qword(self.zone_mask)
+        self.node_flags = ar.serialize_byte(self.node_flags)
+        self.i_vert_pool = AR_INDEX(ar, self.i_vert_pool)
+        self.i_surf = AR_INDEX(ar, self.i_surf)
+        self.i_back = AR_INDEX(ar, self.i_back)
+        self.i_front = AR_INDEX(ar, self.i_front)
+        self.i_plane = AR_INDEX(ar, self.i_plane)
+        self.i_collision_bound = AR_INDEX(ar, self.i_collision_bound)
+        self.i_render_bound = AR_INDEX(ar, self.i_render_bound)
+        self.i_zone[0] = AR_INDEX(ar, self.i_zone[0])
+        self.i_zone[1] = AR_INDEX(ar, self.i_zone[1])
+        self.num_vertices = ar.serialize_byte(self.num_vertices)
+        self.i_leaf[0] = ar.serialize_int32(self.i_leaf[0])
+        self.i_leaf[1] = ar.serialize_int32(self.i_leaf[1])
+        return self
+
 
 class FZoneProperties:
     def __init__(self):
@@ -68,6 +97,16 @@ class FZoneProperties:
         self.connectivity = 0
         self.visibility = 0
 
+    def serialize(self, ar) -> "FZoneProperties":
+        """operator<<(FArchive&, FZoneProperties&) (UnObj.h:148).
+
+        The C++ returns before writing LastRenderTime, so it is never on disk.
+        """
+        self.zone_actor = ar.serialize_object(self.zone_actor)
+        self.connectivity = ar.serialize_qword(self.connectivity)
+        self.visibility = ar.serialize_qword(self.visibility)
+        return self
+
 
 class FLeaf:
     def __init__(self, i_zone=0, i_permeating=0, i_volumetric=0, visible_zones=0):
@@ -75,6 +114,14 @@ class FLeaf:
         self.i_permeating = i_permeating
         self.i_volumetric = i_volumetric
         self.visible_zones = visible_zones
+
+    def serialize(self, ar) -> "FLeaf":
+        """operator<<(FArchive&, FLeaf&) (UnObj.h:179)."""
+        self.i_zone = AR_INDEX(ar, self.i_zone)
+        self.i_permeating = AR_INDEX(ar, self.i_permeating)
+        self.i_volumetric = AR_INDEX(ar, self.i_volumetric)
+        self.visible_zones = ar.serialize_qword(self.visible_zones)
+        return self
 
 
 class FBspSurf:
@@ -92,6 +139,27 @@ class FBspSurf:
         self.actor = None
         self.decals = []
         self.nodes = []
+
+    def serialize(self, ar) -> "FBspSurf":
+        """operator<<(FArchive&, FBspSurf&) (UnObj.h:217).
+
+        The C++ body is ENGINE_API; the layout was read off the map files:
+        the texture and the brush actor are object references, the rest are
+        compact indices, the pan values are 16 bit and the flags a DWORD.
+        The Decals and Nodes arrays are not serialized.
+        """
+        self.texture = ar.serialize_object(self.texture)
+        self.poly_flags = ar.serialize_int32(self.poly_flags)
+        self.p_base = AR_INDEX(ar, self.p_base)
+        self.v_normal = AR_INDEX(ar, self.v_normal)
+        self.v_texture_u = AR_INDEX(ar, self.v_texture_u)
+        self.v_texture_v = AR_INDEX(ar, self.v_texture_v)
+        self.i_light_map = AR_INDEX(ar, self.i_light_map)
+        self.i_brush_poly = AR_INDEX(ar, self.i_brush_poly)
+        self.pan_u = ar.serialize_word(self.pan_u)
+        self.pan_v = ar.serialize_word(self.pan_v)
+        self.actor = ar.serialize_object(self.actor)
+        return self
 
 
 class EPolyFlags:
@@ -160,6 +228,17 @@ class FLightMapIndex:
         self.u_bits = 0
         self.v_bits = 0
 
+    def serialize(self, ar) -> "FLightMapIndex":
+        """operator<<(FArchive&, FLightMapIndex&) (UnObj.h:307)."""
+        self.data_offset = ar.serialize_int32(self.data_offset)
+        self.pan.serialize(ar)
+        self.u_clamp = AR_INDEX(ar, self.u_clamp)
+        self.v_clamp = AR_INDEX(ar, self.v_clamp)
+        self.u_scale = ar.serialize_float(self.u_scale)
+        self.v_scale = ar.serialize_float(self.v_scale)
+        self.i_light_actors = ar.serialize_int32(self.i_light_actors)
+        return self
+
 
 class ESplitType:
     SP_Coplanar = 0
@@ -220,6 +299,28 @@ class FPoly:
         return (abs((self.base - test.base) | self.normal) < 0.01
                 and abs(self.normal | test.normal) > 0.9999)
 
+    def serialize(self, ar) -> "FPoly":
+        """operator<<(FArchive&, FPoly&) (UnModel.cpp:60-74)."""
+        from ..core.system import AR_INDEX
+        self.num_vertices = AR_INDEX(ar, self.num_vertices)
+        self.base.serialize(ar)
+        self.normal.serialize(ar)
+        self.texture_u.serialize(ar)
+        self.texture_v.serialize(ar)
+        # Only serialize the used vertices; NumVertices controls the loop.
+        for i in range(self.num_vertices):
+            if i < len(self.vertex):
+                self.vertex[i].serialize(ar)
+        self.poly_flags = ar.serialize_int32(self.poly_flags)
+        self.actor = ar.serialize_object(self.actor)
+        self.texture = ar.serialize_object(self.texture)
+        self.item_name = ar.serialize_name(self.item_name)
+        self.i_link = AR_INDEX(ar, self.i_link)
+        self.i_brush_poly = AR_INDEX(ar, self.i_brush_poly)
+        self.pan_u = ar.serialize_word(self.pan_u)
+        self.pan_v = ar.serialize_word(self.pan_v)
+        return self
+
 
 class UPolys(UObject):
     def __init__(self):
@@ -227,8 +328,17 @@ class UPolys(UObject):
         self.element = []
 
     def serialize(self, ar):
+        """UPolys::Serialize (UnObj.h:412).
+
+        The element count and capacity come first, then the polygons.
+        """
         super().serialize(ar)
-        ar << self.element
+        db_num = ar.serialize_int32(len(self.element))
+        ar.serialize_int32(db_num)  # DbMax
+        if ar.is_loading():
+            self.element = []
+        for _ in range(db_num):
+            self.element.append(FPoly().serialize(ar))
         return self
 
 
@@ -237,12 +347,28 @@ class FVert:
         self.p_vertex = p_vertex
         self.i_side = i_side
 
+    def serialize(self, ar) -> "FVert":
+        """operator<<(FArchive&, FVert&) (UnObj.h:454)."""
+        self.p_vertex = AR_INDEX(ar, self.p_vertex)
+        self.i_side = AR_INDEX(ar, self.i_side)
+        return self
+
 
 class FDecal:
     def __init__(self):
         self.vertices = [FVector() for _ in range(4)]
         self.actor = None
         self.nodes = []
+
+    def serialize(self, ar) -> "FDecal":
+        """operator<<(FArchive&, FDecal&) (UnObj.h:478).
+
+        The inline C++ only writes the actor for a trans archive, so a decal
+        takes no space in a map file.
+        """
+        if not ar.is_loading() and not ar.is_saving():
+            self.actor = ar.serialize_object(self.actor)
+        return self
 
 
 __all__ = [

@@ -1,56 +1,54 @@
-"""Load ULevel from .unr using derived DM-Morpheus.unr layout + UnLevel.cpp.
+"""Generic ULevel loader from a .unr package (UnLevel.cpp:65-263).
 
-Reads file at SerialOffset -> SerialOffset+SerialSize, parses per C++ ULevelBase::Serialize / ULevel::Serialize (UnLevel.cpp:65,233) and UnModel::Serialize (UnModel.cpp).
+The level export's serialised data is the ULevelBase::Serialize /
+ULevel::Serialize byte stream; the linker's preload() walks it through
+UObject::Serialize (which reads the tagged property block and, for
+RF_HasStack exports, the execution stack) and the level's own tail. This
+module is a thin wrapper that resolves the level export and asserts the
+stream was consumed exactly, so any layout drift fails loudly instead of
+returning a half-parsed level.
 """
 from __future__ import annotations
-from typing import Any, Optional, List
-from ..engine.level import ULevel, NUM_LEVEL_TEXT_BLOCKS
+
+from typing import Any, Optional
+
+from ..engine.level import ULevel, ULevelBase
 
 
 def load_level(linker: Any, export: Any) -> ULevel:
-    """Parse level data from export and return ULevel.
+    """Parse the level export and return a populated ULevel.
 
-    Uses derived anchors from DM-Morpheus.unr (offset 1191446 / size 16542):
-    - 0x01 tag at byte 0.
-    - Actor counts at bytes 1-8 (1975 / 1975).
-    - Actor refs array ~1975 entries from byte 9 to ~2730.
-    - FURL at ~2730 (12 bytes: 07 75 6e 72 65 61 6c 00 00 0a → "unreal").
-    - Model compact ref at ~2760 (0x4e 0x0e = 910) → resolve via linker.
-    - ReachSpecs at 2762 (655 * 2 bytes = 1310 bytes → 16519).
-    - Tail 23 bytes at 16519.
+    Args:
+        linker: the ULinkerLoad that owns the export.
+        export: the FObjectExport describing the level (0-based index
+            into the linker's export_map, or the export object itself).
+
+    Returns:
+        A ULevel whose Actors, URL, Model, ReachSpecs, TimeSeconds,
+        TextBlocks and TravelInfo are populated.
+
+    Raises:
+        ValueError if the serialised data is not consumed exactly.
     """
-    level = ULevel()
-    offset = getattr(export, 'SerialOffset', 0)
-    size = getattr(export, 'SerialSize', 0)
-    # Read from linker's loader (archive backing the package file)
-    loader = getattr(linker, 'loader', None)
-    raw = None
-    if loader and hasattr(loader, 'seek') and hasattr(loader, 'read'):
-        loader.seek(offset)
-        raw = loader.read(size)
+    # Accept either the export index or the FObjectExport instance.
+    if isinstance(export, int):
+        index = export
+        exp = linker.export_map[index]
     else:
-        # Fallback: open file via linker's file reference if available
-        pkg_path = getattr(linker, 'PackageFileName',
-                          getattr(export, 'PackageFile', ''))
-        if pkg_path:
-            with open(str(pkg_path), 'rb') as f:
-                f.seek(offset)
-                raw = f.read(size)
-    if raw is None or len(raw) < 2762:
-        # Not enough data; return empty level
-        return level
-
-    # Basic derived parse (key fields only; full serialization deferred)
-    import struct
-    # Actor count (bytes 1-4, int32 LE)
-    actor_db = struct.unpack('<i', raw[1:5])[0]  # 1975
-    # Model ref at bytes 2760-2761 (compact index 910)
-    model_ref = struct.unpack('<H', raw[2760:2762])[0]
-    # ReachSpecs at 2762 to 16519 (655 * 2 bytes)
-    reach_count = 655
-    reach_bytes = raw[2762:2762 + 2 * reach_count]
-    level.ReachSpecs = list(struct.unpack('<' + 'H' * reach_count, reach_bytes))
-    level.Model = model_ref  # compact index 910
-    level.TimeSeconds = 0.0
-    level.TextBlocks = [0] * NUM_LEVEL_TEXT_BLOCKS
+        exp = export
+        index = linker.export_map.index(exp)
+    level = linker.create_export(index)
+    if not isinstance(level, ULevelBase):
+        raise ValueError(
+            "level export resolved to "
+            f"{type(level).__name__}, not a ULevelBase"
+        )
+    linker.preload(level)
+    # ULevel::Serialize calls Ar.Preload(Model) after writing it
+    # (UnLevel.cpp:257-258); the reference alone leaves the model empty.
+    if level.Model is not None:
+        linker.preload(level.Model)
     return level
+
+
+__all__ = ["load_level"]

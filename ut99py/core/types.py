@@ -513,6 +513,13 @@ class FVector:
     def __repr__(self) -> str:
         return f"FVector({self.x}, {self.y}, {self.z})"
 
+    def serialize(self, ar) -> "FVector":
+        """operator<<(FArchive&, FVector&) (UnMath.h:518): X, Y, Z."""
+        self.x = ar.serialize_float(self.x)
+        self.y = ar.serialize_float(self.y)
+        self.z = ar.serialize_float(self.z)
+        return self
+
 
 class FPlane(FVector):
     def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, w: float = 1.0):
@@ -547,6 +554,12 @@ class FPlane(FVector):
             normal.z,
             self.w - (coords.origin.transform_vector_by(coords) | normal),
         )
+
+    def serialize(self, ar) -> "FPlane":
+        """operator<<(FArchive&, FPlane&) (UnMath.h:854): the vector plus W."""
+        FVector.serialize(self, ar)
+        self.w = ar.serialize_float(self.w)
+        return self
 
 
 class FRotator:
@@ -1466,6 +1479,13 @@ class FBox:
     def init(self) -> None:
         self.is_valid = 0
 
+    def serialize(self, ar) -> "FBox":
+        """operator<<(FArchive&, FBox&) (UnMath.h:1217): Min, Max, IsValid."""
+        self.min.serialize(ar)
+        self.max.serialize(ar)
+        self.is_valid = ar.serialize_byte(self.is_valid)
+        return self
+
     def get_center(self) -> FVector:
         return (self.min + self.max) * 0.5
 
@@ -1576,6 +1596,14 @@ class FSphere(FPlane):
 
     def is_valid_sphere(self) -> bool:
         return self.w > 0.0
+
+    def serialize(self, ar) -> "FSphere":
+        """operator<<(FArchive&, FSphere&) (UnMath.h:877): a plane from v62 on."""
+        if ar.ver() <= 61:
+            FVector.serialize(self, ar)
+        else:
+            FPlane.serialize(self, ar)
+        return self
 
     @classmethod
     def from_vectors(cls, points: Iterable[FVector]) -> "FSphere":

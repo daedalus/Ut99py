@@ -52,11 +52,21 @@ class FOpenGLRenderer:
             # Set clear color
             gl.glClearColor(*self._clear_color)
 
+            # Upload initial matrices
+            self._apply_matrices()
+
             self._initialized = True
             return True
         except Exception as e:
             print(f"OpenGL init failed: {e}")
             return False
+
+    def _apply_matrices(self) -> None:
+        """Upload projection and modelview matrices to OpenGL"""
+        gl.glMatrixMode(gl.GL_PROJECTION)
+        gl.glLoadMatrixf(self._projection_matrix)
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        gl.glLoadMatrixf(self._modelview_matrix)
 
     def shutdown(self) -> None:
         """Shutdown OpenGL"""
@@ -84,6 +94,7 @@ class FOpenGLRenderer:
     def begin_scene(self) -> None:
         """Begin a new frame"""
         self.clear()
+        self._apply_matrices()
 
     def end_scene(self) -> None:
         """End the current frame"""
@@ -128,7 +139,7 @@ class FOpenGLRenderer:
     def _set_perspective(
         self, fov: float, aspect: float, near: float, far: float
     ) -> None:
-        """Set perspective projection matrix"""
+        """Set perspective projection matrix (column-major for OpenGL)."""
         f = 1.0 / math.tan(math.radians(fov) / 2.0)
 
         self._projection_matrix = [
@@ -142,11 +153,11 @@ class FOpenGLRenderer:
             0.0,
             0.0,
             0.0,
-            (far + near) / (near - far),
+            -(far + near) / (far - near),
             -1.0,
             0.0,
             0.0,
-            (2.0 * far * near) / (near - far),
+            -2.0 * far * near / (far - near),
             0.0,
         ]
 
@@ -199,12 +210,14 @@ class FOpenGLRenderer:
             0.0,
             1.0,
         ]
+        self._sync_modelview()
 
     def translate(self, x: float, y: float, z: float) -> None:
         """Translate the modelview matrix"""
         self._modelview_matrix[12] += x
         self._modelview_matrix[13] += y
         self._modelview_matrix[14] += z
+        self._sync_modelview()
 
     def rotate(self, angle: float, x: float, y: float, z: float) -> None:
         """Rotate the modelview matrix"""
@@ -240,12 +253,21 @@ class FOpenGLRenderer:
 
         # Multiply matrices
         self._modelview_matrix = self._multiply_matrices(self._modelview_matrix, rot)
+        self._sync_modelview()
 
     def scale(self, x: float, y: float, z: float) -> None:
         """Scale the modelview matrix"""
         self._modelview_matrix[0] *= x
         self._modelview_matrix[5] *= y
         self._modelview_matrix[10] *= z
+        self._sync_modelview()
+
+    def _sync_modelview(self) -> None:
+        """Upload the current modelview matrix to OpenGL"""
+        if not OPENGL_AVAILABLE:
+            return
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        gl.glLoadMatrixf(self._modelview_matrix)
 
     def _multiply_matrices(self, a: list, b: list) -> list:
         """Multiply two 4x4 matrices"""

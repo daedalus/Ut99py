@@ -19,6 +19,7 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtOpenGL import QGLWidget
 
 from .opengl import FOpenGLRenderer
+from .bsp_draw import draw_model_simple
 
 
 class GLWidget(QGLWidget):
@@ -26,7 +27,8 @@ class GLWidget(QGLWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._renderer: Optional[FOpenGLRenderer] = None
+        from .opengl import FOpenGLRenderer
+        self._renderer = FOpenGLRenderer()
         self._frame_count: int = 0
         self._fps_timer: float = 0.0
         self._fps: float = 0.0
@@ -131,6 +133,17 @@ class GLWidget(QGLWidget):
             self._renderer.load_identity()
             self._renderer.translate(3.0, 1.0, -7.0)
             self._renderer.draw_sphere(0.0, 0.0, 0.0, 0.8, 16)
+
+            # ---- Loaded UT99 level BSP (if available) ----
+            try:
+                from ..core.linkers import load_package
+                from ..engine.levelload import load_level
+                lk = load_package("/home/dclavijo/Games/UnrealTournament/Maps/DM-Morpheus.unr")
+                level = load_level(lk, lk.export_map[1082])
+                if level.Model:
+                    draw_model_simple(self._renderer, level.Model)
+            except Exception:
+                pass  # Level render optional
 
             self._renderer.end_scene()
 

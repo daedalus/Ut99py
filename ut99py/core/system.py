@@ -29,6 +29,7 @@ from .objver import (
     ENGINE_NEGOTIATION_VERSION,
     PACKAGE_FILE_VERSION,
     PACKAGE_FILE_VERSION_LICENSEE,
+    VER_SIZED_NAME_TABLE,
 )
 from .objects import (
     UObject,
@@ -272,15 +273,22 @@ class FArchive:
     def serialize_str(self, s: FString) -> FString:
         """operator<<(FArchive&, FString&) (UnTemplate.h:1403).
 
-        The C++ body is CORE_API (in the prebuilt Core.lib); the on-disk layout
-        follows Help/PACKAGES.md:656 -- characters, one byte each, terminated by
-        a zero byte -- which is also what engine/ut_reader.py's _read_string
-        decodes. C++ returns the FArchive, but Python strings are immutable, so
-        the loaded value is returned the way the other primitives are.
+        The C++ body is CORE_API (in the prebuilt Core.lib). The on-disk
+        layout is the sized one the name table uses (UnName.h:34): a byte
+        count that includes the terminating NUL, then that many bytes. The
+        pre-64 layout is a bare NUL-terminated run of characters.
         """
         if self._loading:
+            if self.ver() >= VER_SIZED_NAME_TABLE:
+                return FString(self._read_ansi_string())
             return FString(self._read_null_terminated_string())
-        self.write(s.encode('latin-1', errors='replace') + b'\x00')
+        data = s.encode('latin-1', errors='replace') + b'\x00'
+        if self.ver() >= VER_SIZED_NAME_TABLE:
+            # The length counts the terminator, but an empty string stores a
+            # zero length and no terminator (the level URL's Host and Portal).
+            self.write(b'\x00' if not s else bytes([len(data)]) + data)
+        else:
+            self.write(data)
         return s
 
     def serialize_int(self, value: int, max_bits: int = 0) -> int:
